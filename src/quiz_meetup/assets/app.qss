@@ -1,0 +1,549 @@
+QWidget {
+    background-color: #f5f6fa;
+    color: #1f2430;
+    font-size: 15px;
+}
+
+QLabel {
+    background: transparent;
+}
+
+QMainWindow {
+    background-color: #f5f6fa;
+}
+
+QLabel#HeaderTitle {
+    font-size: 26px;
+    font-weight: 800;
+    color: #ffffff;
+}
+
+QLabel#HeaderSubtitle {
+    color: #aeb8c7;
+    font-size: 14px;
+}
+
+QLabel#BrandBadge {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #c62828, stop:1 #ff4d4f);
+    border-radius: 14px;
+}
+
+QLabel#PageTitle {
+    font-size: 30px;
+    font-weight: 800;
+    color: #252a34;
+}
+
+QLabel#PageHint {
+    color: #7d8798;
+    font-size: 14px;
+}
+
+QLabel#SectionCaption {
+    color: #1f2430;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+QLabel#StatusBadge {
+    background: #eef1f7;
+    color: #374151;
+    border-radius: 14px;
+    padding: 10px 14px;
+    font-weight: 600;
+}
+
+QLabel#AutosaveBadge {
+    background: #eff9f1;
+    color: #176b3f;
+    border: 1px solid #ccebd3;
+    border-radius: 14px;
+    padding: 10px 14px;
+    font-weight: 600;
+}
+
+QLabel#DetailsLabel,
+QLabel#DockInfo {
+    background: #ffffff;
+    border: 1px solid #e8ebf2;
+    border-radius: 16px;
+    padding: 14px;
+    color: #4b5563;
+}
+
+QLabel#PreviewFrame {
+    background: #f8fbff;
+    border: 1px solid #d9e0ea;
+    border-radius: 18px;
+    padding: 18px;
+    color: #52627a;
+}
+
+QLabel#ControlTimerValue {
+    background: #10213a;
+    color: #f8fafc;
+    border-radius: 18px;
+    padding: 18px 20px;
+    font-size: 36px;
+    font-weight: 700;
+}
+
+QFrame#SidebarCard,
+QFrame#HeaderCard,
+QFrame#ContentCard {
+    background: #ffffff;
+    border: 1px solid #e8ebf2;
+    border-radius: 24px;
+}
+
+QFrame#SidebarCard {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #1c1f26, stop:1 #171a20);
+    border: none;
+}
+
+QPushButton#SectionButton {
+    background: transparent;
+    color: #eef2f7;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 16px;
+    padding: 16px 18px;
+    text-align: left;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+QPushButton#SectionButton:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+QPushButton#SectionButton:checked {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4b242d, stop:1 #6c2c35);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+QListWidget,
+QTreeWidget,
+QComboBox,
+QLineEdit,
+QTextEdit,
+QSpinBox,
+QTableWidget {
+    background: #ffffff;
+    border: 1px solid #e6e9f0;
+    border-radius: 16px;
+    padding: 10px 12px;
+    alternate-background-color: #f8fbff;
+}
+
+QTextEdit {
+    padding-top: 10px;
+}
+
+QListWidget::item,
+QTreeWidget::item {
+    padding: 10px 8px;
+    border-radius: 10px;
+}
+
+QTreeView::item:alternate {
+    background: #f8fbff;
+}
+
+QListWidget::item:selected,
+QTreeWidget::item:selected {
+    background: #f3f4f8;
+    color: #1f2430;
+}
+
+QScrollArea {
+    background: transparent;
+    border: none;
+}
+
+QTableWidget {
+    alternate-background-color: #f8fbff;
+    gridline-color: #e1e8f0;
+    selection-background-color: #dbeafe;
+    selection-color: #10213a;
+}
+
+QHeaderView::section {
+    background: #f4f6fb;
+    color: #414b5a;
+    border: none;
+    border-bottom: 1px solid #e6e9f0;
+    padding: 10px 12px;
+    font-weight: 700;
+}
+
+QPushButton {
+    background: #20242d;
+    color: #ffffff;
+    border: none;
+    border-radius: 14px;
+    padding: 13px 18px;
+    font-weight: 600;
+}
+
+QPushButton:hover {
+    background: #171b22;
+}
+
+QPushButton:pressed {
+    background: #101318;
+}
+
+QPushButton#SecondaryButton {
+    background: #eef1f6;
+    color: #2c3442;
+}
+
+QPushButton#SecondaryButton:hover {
+    background: #e5e9f1;
+}
+
+QPushButton#AccentButton {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #c62828, stop:1 #e53935);
+}
+
+QPushButton#AccentButton:hover {
+    background: #b71c1c;
+}
+
+QPushButton#DangerButton {
+    background: #ffffff;
+    color: #d62839;
+    border: 1px solid #f6c5cb;
+}
+
+QPushButton#DangerButton:hover {
+    background: #fff1f2;
+}
+
+QPushButton#LargeActionButton {
+    background: #20242d;
+    min-height: 62px;
+    font-size: 15px;
+}
+
+QPushButton:disabled {
+    background: #edf2f8;
+    color: #7b8797;
+    border: 1px solid #d7dee8;
+}
+
+QPushButton#LargeActionButton:disabled,
+QPushButton#AccentButton:disabled,
+QPushButton#SecondaryButton:disabled {
+    background: #edf2f8;
+    color: #7b8797;
+}
+
+QSplitter::handle {
+    background: transparent;
+}
+
+QListWidget#GamesCatalogList {
+    background: transparent;
+    border: none;
+    padding: 0;
+}
+
+QListWidget#GamesCatalogList::item {
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 0 0 14px 0;
+}
+
+QListWidget#GamesCatalogList::item:selected {
+    background: transparent;
+    border: none;
+}
+
+QFrame#GameListCard {
+    background: #ffffff;
+    border: 1px solid #eceff5;
+    border-radius: 24px;
+}
+
+QFrame#GameListCard[selected="true"] {
+    border: 1px solid #f2c6cb;
+    background: #fffafb;
+}
+
+QLabel#GameCardBadge {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #2b2f38, stop:1 #1d2128);
+    border-radius: 29px;
+}
+
+QLabel#GameCardTitle {
+    color: #242a36;
+    font-size: 18px;
+    font-weight: 800;
+}
+
+QLabel#GameCardMeta {
+    color: #838a99;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+QPushButton#CardPrimaryButton {
+    background: #252b35;
+    color: #ffffff;
+    border: none;
+    border-radius: 14px;
+    padding: 13px 18px;
+    font-weight: 700;
+}
+
+QPushButton#CardPrimaryButton:hover {
+    background: #1c2028;
+}
+
+QPushButton#CardStartButton {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #c62828, stop:1 #e53935);
+    color: #ffffff;
+    border: none;
+    border-radius: 14px;
+    padding: 13px 18px;
+    font-weight: 700;
+}
+
+QPushButton#CardStartButton:hover {
+    background: #b71c1c;
+}
+
+QPushButton#CardIconButton {
+    background: #f2f4f8;
+    color: #2b3341;
+    border: 1px solid #e5e8ef;
+    border-radius: 14px;
+    padding: 0;
+}
+
+QPushButton#CardIconButton:hover {
+    background: #eaedf3;
+}
+
+QPushButton#CardDeleteButton {
+    background: #fff3f4;
+    color: #dc2626;
+    border: 1px solid #f6c6cc;
+    border-radius: 14px;
+    padding: 0;
+}
+
+QPushButton#CardDeleteButton:hover {
+    background: #ffe8eb;
+}
+
+QDockWidget {
+    color: #122033;
+}
+
+QDockWidget::title {
+    background: #e6ecf7;
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid #d0d8e6;
+}
+
+QStatusBar {
+    background: #eef2f8;
+    color: #516074;
+}
+
+QWidget#ProjectorScreen {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #08111f, stop:0.5 #10213a, stop:1 #17324d);
+}
+
+QLabel#ProjectorLogo {
+    background: transparent;
+}
+
+QLabel#ProjectorBackground {
+    background: #0f172a;
+}
+
+QLabel#ProjectorTitle {
+    color: #f8fafc;
+    font-size: 54px;
+    font-weight: 800;
+}
+
+QLabel#ProjectorSubtitle {
+    color: #d7e7ff;
+    font-size: 25px;
+    font-weight: 600;
+}
+
+QLabel#ProjectorBody {
+    color: #edf3ff;
+    font-size: 30px;
+    line-height: 1.4;
+}
+
+QLabel#ProjectorFooter {
+    color: #bfd0ea;
+    font-size: 19px;
+}
+
+QLabel#ProjectorBadge {
+    background: rgba(255, 255, 255, 0.1);
+    color: #f8fafc;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 16px;
+    padding: 10px 20px;
+    font-size: 17px;
+    font-weight: 700;
+}
+
+QLabel#ProjectorMusicStatus {
+    background: rgba(8, 17, 31, 0.6);
+    color: #fde68a;
+    border: 1px solid rgba(253, 230, 138, 0.28);
+    border-radius: 16px;
+    padding: 10px 18px;
+    font-size: 17px;
+    font-weight: 700;
+}
+
+QFrame#ProjectorTimerFrame {
+    background: rgba(7, 20, 39, 0.6);
+    border: 1px solid rgba(191, 219, 254, 0.18);
+    border-radius: 28px;
+    padding: 16px;
+}
+
+QFrame#ProjectorTimerFrame[finished="true"] {
+    background: rgba(82, 16, 28, 0.7);
+    border: 1px solid rgba(251, 113, 133, 0.4);
+}
+
+QLabel#ProjectorTimerSource {
+    color: #cbd5e1;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+QLabel#ProjectorTimerValue {
+    color: #f8fafc;
+    font-size: 64px;
+    font-weight: 800;
+}
+
+QLabel#ProjectorTimerValue[finished="true"] {
+    color: #fecdd3;
+}
+
+QWidget#ProjectorTimerCircle {
+    background: transparent;
+}
+
+QProgressBar#ProjectorTimerProgress {
+    background: rgba(255, 255, 255, 0.07);
+    color: #f8fafc;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 13px;
+    text-align: center;
+    min-height: 26px;
+}
+
+QProgressBar#ProjectorTimerProgress::chunk {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #34d399, stop:0.6 #38bdf8, stop:1 #fbbf24);
+    border-radius: 11px;
+}
+
+QLabel#ProjectorMediaPlaceholder,
+QLabel#ProjectorMediaFrame,
+QVideoWidget#ProjectorVideoFrame {
+    background: rgba(255, 255, 255, 0.08);
+    color: #dbeafe;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 24px;
+    padding: 28px;
+}
+
+QFrame#ProjectorOptionsFrame {
+    background: transparent;
+}
+
+QLabel#ProjectorOption {
+    background: rgba(255, 255, 255, 0.11);
+    color: #eff6ff;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 22px;
+    padding: 20px 24px;
+    font-size: 24px;
+    font-weight: 600;
+}
+
+QLabel#ProjectorOption[highlighted="true"] {
+    background: rgba(20, 184, 166, 0.24);
+    color: #f0fdfa;
+    border: 1px solid rgba(45, 212, 191, 0.5);
+}
+
+QLabel#ProjectorAnswer {
+    background: rgba(12, 116, 110, 0.28);
+    color: #ecfeff;
+    border: 1px solid rgba(45, 212, 191, 0.35);
+    border-radius: 24px;
+    padding: 22px 28px;
+    font-size: 32px;
+    font-weight: 700;
+}
+
+QTableWidget#ProjectorScoreTable {
+    background: rgba(255, 255, 255, 0.08);
+    color: #f8fafc;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 24px;
+    gridline-color: rgba(255, 255, 255, 0.08);
+    font-size: 24px;
+    padding: 10px;
+}
+
+QTableWidget#ProjectorScoreTable::item {
+    padding: 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+QTableWidget#ProjectorScoreTable QHeaderView::section {
+    background: rgba(255, 255, 255, 0.1);
+    color: #eff6ff;
+    border: none;
+    padding: 16px 14px;
+    font-weight: 700;
+}
+
+QFrame#ProjectorWinnerCard {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 28px;
+}
+
+QFrame#ProjectorWinnerCard[champion="true"] {
+    border: 1px solid rgba(250, 204, 21, 0.42);
+}
+
+QLabel#ProjectorWinnerPlace {
+    color: #cfe0ff;
+    font-size: 18px;
+    font-weight: 700;
+}
+
+QLabel#ProjectorWinnerTeam {
+    color: #f8fafc;
+    font-size: 24px;
+    font-weight: 800;
+}
+
+QLabel#ProjectorWinnerScore {
+    color: #bfdbfe;
+    font-size: 18px;
+    font-weight: 700;
+}

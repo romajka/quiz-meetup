@@ -1,0 +1,13 @@
+.venv/
+.quiz_meetup_data/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+*.db
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+src/*.egg-info/
+src/**/*.egg-info/
