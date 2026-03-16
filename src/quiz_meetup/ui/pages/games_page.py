@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, Signal, QSize
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtGui import QDesktopServices, QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
@@ -39,11 +40,104 @@ from quiz_meetup.services.team_service import TeamService
 from quiz_meetup.ui.icons import apply_button_icon, interface_icon
 
 
+class GameMediaDropZone(QFrame):
+    files_dropped = Signal(list)
+    browse_requested = Signal()
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._drop_enabled = False
+        self.setObjectName("GameMediaDropZone")
+        self.setAcceptDrops(True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setProperty("dragActive", False)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(3)
+
+        self.title_label = QLabel("Сначала сохраните игру")
+        self.title_label.setObjectName("DropZoneTitle")
+        self.hint_label = QLabel("После этого сюда можно перетаскивать файлы.")
+        self.hint_label.setObjectName("CompactListMeta")
+        self.hint_label.setWordWrap(True)
+
+        layout.addWidget(self.title_label)
+        layout.addWidget(self.hint_label)
+
+    def set_drop_enabled(self, enabled: bool) -> None:
+        self._drop_enabled = enabled
+        self.setEnabled(enabled)
+        if enabled:
+            self.title_label.setText("Перетащите сюда общие файлы")
+            self.hint_label.setText("Изображения, видео и аудио добавятся в библиотеку игры.")
+        else:
+            self.title_label.setText("Сначала сохраните игру")
+            self.hint_label.setText("После этого сюда можно перетаскивать файлы.")
+        self._refresh_style()
+
+    def mousePressEvent(self, event) -> None:  # type: ignore[override]
+        if self._drop_enabled and event.button() == Qt.MouseButton.LeftButton:
+            self.browse_requested.emit()
+        super().mousePressEvent(event)
+
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        if self._can_accept(event):
+            event.acceptProposedAction()
+            self.setProperty("dragActive", True)
+            self._refresh_style()
+            return
+        event.ignore()
+
+    def dragMoveEvent(self, event: QDragEnterEvent) -> None:
+        if self._can_accept(event):
+            event.acceptProposedAction()
+            return
+        event.ignore()
+
+    def dragLeaveEvent(self, event) -> None:  # type: ignore[override]
+        self.setProperty("dragActive", False)
+        self._refresh_style()
+        super().dragLeaveEvent(event)
+
+    def dropEvent(self, event: QDropEvent) -> None:
+        self.setProperty("dragActive", False)
+        self._refresh_style()
+        if not self._can_accept(event):
+            event.ignore()
+            return
+
+        file_paths: list[str] = []
+        for url in event.mimeData().urls():
+            if not url.isLocalFile():
+                continue
+            path = Path(url.toLocalFile())
+            if path.exists() and path.is_file():
+                file_paths.append(str(path))
+
+        if not file_paths:
+            event.ignore()
+            return
+
+        self.files_dropped.emit(file_paths)
+        event.acceptProposedAction()
+
+    def _can_accept(self, event) -> bool:
+        return self._drop_enabled and event.mimeData().hasUrls()
+
+    def _refresh_style(self) -> None:
+        self.style().unpolish(self)
+        self.style().polish(self)
+        self.update()
+
+
 class GamesPage(QWidget):
     data_changed = Signal()
     selection_changed = Signal()
     autosave_status_changed = Signal(str)
     open_media_requested = Signal()
+    edit_round_requested = Signal(int)
+    edit_question_requested = Signal(int)
     view_changed = Signal()
     start_game_requested = Signal(int)
     start_new_session_requested = Signal(int)
@@ -123,7 +217,7 @@ class GamesPage(QWidget):
         self.game_description_input.setPlaceholderText(
             "Описание игры, настроение, особенности раундов и заметки для ведущего."
         )
-        self.game_description_input.setFixedHeight(120)
+        self.game_description_input.setFixedHeight(72)
 
         self.title_input = self.game_title_input
         self.description_input = self.game_description_input
@@ -145,8 +239,8 @@ class GamesPage(QWidget):
         self.game_stats_label.setWordWrap(True)
 
         self.rounds_list = QListWidget()
-        self.rounds_list.setMinimumHeight(220)
-        self.rounds_list.setMaximumHeight(260)
+        self.rounds_list.setMinimumHeight(150)
+        self.rounds_list.setMaximumHeight(190)
         self.round_title_input = QLineEdit()
         self.round_title_input.setPlaceholderText("Например: Разминка")
         self.round_timer_input = QSpinBox()
@@ -168,14 +262,14 @@ class GamesPage(QWidget):
         self.round_info_label.setObjectName("DetailsLabel")
         self.round_info_label.setWordWrap(True)
         self.round_hint_label = QLabel(
-            "Раунды создаются по одному. Сначала соберите список раундов, потом внутри каждого добавляйте вопросы."
+            "Выберите раунд, чтобы увидеть его вопросы."
         )
         self.round_hint_label.setObjectName("PageHint")
         self.round_hint_label.setWordWrap(True)
 
         self.questions_list = QListWidget()
-        self.questions_list.setMinimumHeight(220)
-        self.questions_list.setMaximumHeight(280)
+        self.questions_list.setMinimumHeight(170)
+        self.questions_list.setMaximumHeight(220)
         self.question_type_combo = QComboBox()
         self.question_type_combo.addItem("Открытый вопрос", "open")
         self.question_type_combo.addItem("ABCD вопрос", "abcd")
@@ -234,7 +328,7 @@ class GamesPage(QWidget):
         self.question_info_label.setObjectName("DetailsLabel")
         self.question_info_label.setWordWrap(True)
         self.question_hint_label = QLabel(
-            "Вопрос редактируется подробно: текст, очки, таймер, ответ и варианты."
+            "Здесь показаны вопросы выбранного раунда."
         )
         self.question_hint_label.setObjectName("PageHint")
         self.question_hint_label.setWordWrap(True)
@@ -262,32 +356,29 @@ class GamesPage(QWidget):
         self.remove_answer_media_button.setObjectName("DangerButton")
         self.back_to_games_button = QPushButton("Назад к списку игр")
         self.back_to_games_button.setObjectName("SecondaryButton")
-        self.open_media_button = QPushButton("Добавить или настроить общие файлы")
+        self.open_media_button = QPushButton("Открыть медиа")
         self.open_media_button.setObjectName("SecondaryButton")
         self.media_hint_label = QLabel(
-            "Медиа: вы можете показать или включить любой файл во время игры. "
-            "Например, заставку игры, спонсорское видео, изображение вопроса или фоновую музыку."
+            "Загрузите сюда общие файлы, если они будут использоваться в игре. Желательно наименуйте их."
         )
         self.media_hint_label.setObjectName("DetailsLabel")
         self.media_hint_label.setWordWrap(True)
         self.editor_step_label = QLabel(
-            "Шаг 1. Заполните основную информацию об игре. "
-            "Шаг 2. Добавьте раунды. Шаг 3. Добавьте вопросы и медиа."
+            "Краткая информация по игре."
         )
         self.editor_step_label.setObjectName("PageHint")
         self.editor_step_label.setWordWrap(True)
         self.game_mode_label = QLabel(
-            "Режим проведения: ведущий вручную показывает вопросы и ответы.\n"
-            "Играют: команды.\n"
-            "Очки: выставляются вручную по раундам."
+            "Ведущий вручную показывает вопросы, ответы и выставляет баллы."
         )
         self.game_mode_label.setObjectName("DetailsLabel")
         self.game_mode_label.setWordWrap(True)
         self.game_media_state_label = QLabel(
-            "Сначала сохраните игру. Здесь будут общие файлы: заставка, правила, спонсоры, музыка ожидания."
+            "Пока нет общих файлов."
         )
         self.game_media_state_label.setObjectName("DetailsLabel")
         self.game_media_state_label.setWordWrap(True)
+        self.game_media_drop_zone = GameMediaDropZone()
         self.game_media_buttons_widget = QWidget()
         self.game_media_buttons_layout = QGridLayout(self.game_media_buttons_widget)
         self.game_media_buttons_layout.setContentsMargins(0, 0, 0, 0)
@@ -450,7 +541,6 @@ class GamesPage(QWidget):
 
         content_layout.addWidget(self._build_editor_header_card())
         content_layout.addWidget(self._build_game_details_card())
-        content_layout.addWidget(self._build_game_mode_card())
         content_layout.addWidget(self._build_media_hint_card())
         content_layout.addWidget(self._build_rounds_card())
         content_layout.addWidget(self._build_questions_card())
@@ -488,12 +578,13 @@ class GamesPage(QWidget):
         card.setObjectName("ContentCard")
 
         layout = QVBoxLayout(card)
-        layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(12)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
         title = QLabel("Общие файлы игры")
         title.setObjectName("SectionCaption")
         layout.addWidget(title)
         layout.addWidget(self.media_hint_label)
+        layout.addWidget(self.game_media_drop_zone)
         layout.addWidget(self.game_media_state_label)
         layout.addWidget(self.game_media_buttons_widget)
         layout.addWidget(self.open_media_button)
@@ -546,26 +637,18 @@ class GamesPage(QWidget):
         card.setObjectName("ContentCard")
 
         layout = QVBoxLayout(card)
-        layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(12)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(8)
 
         buttons_row = QHBoxLayout()
         buttons_row.setSpacing(10)
         buttons_row.addWidget(self.save_game_button)
         buttons_row.addStretch(1)
 
-        title = QLabel("Редактор выбранной игры")
-        title.setObjectName("SectionCaption")
-        layout.addWidget(title)
-        layout.addWidget(self.mode_label)
-        layout.addWidget(QLabel("Название игры"))
-        layout.addWidget(self.game_title_input)
-        layout.addWidget(QLabel("Описание"))
-        layout.addWidget(self.game_description_input)
         layout.addLayout(buttons_row)
-        layout.addWidget(QLabel("Информация"))
+        layout.addWidget(self.game_title_input)
+        layout.addWidget(self.game_description_input)
         layout.addWidget(self.game_meta_label)
-        layout.addWidget(QLabel("Сводка"))
         layout.addWidget(self.game_stats_label)
         return card
 
@@ -574,32 +657,14 @@ class GamesPage(QWidget):
         card.setObjectName("ContentCard")
 
         layout = QVBoxLayout(card)
-        layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(12)
-
-        buttons_grid = QGridLayout()
-        buttons_grid.setHorizontalSpacing(8)
-        buttons_grid.setVerticalSpacing(8)
-        buttons_grid.addWidget(self.new_round_button, 0, 0)
-        buttons_grid.addWidget(self.round_up_button, 0, 1)
-        buttons_grid.addWidget(self.round_down_button, 1, 0)
-        buttons_grid.addWidget(self.delete_round_button, 1, 1)
-
-        form_layout = QFormLayout()
-        form_layout.setContentsMargins(0, 0, 0, 0)
-        form_layout.setSpacing(10)
-        form_layout.addRow("Название", self.round_title_input)
-        form_layout.addRow("Заметка", self.round_notes_input)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
 
         title = QLabel("Раунды игры")
         title.setObjectName("SectionCaption")
         layout.addWidget(title)
         layout.addWidget(self.round_hint_label)
-        layout.addLayout(buttons_grid)
         layout.addWidget(self.rounds_list, 1)
-        layout.addLayout(form_layout)
-        layout.addWidget(self.save_round_button)
-        layout.addWidget(self.round_info_label)
         return card
 
     def _build_questions_card(self) -> QWidget:
@@ -607,59 +672,14 @@ class GamesPage(QWidget):
         card.setObjectName("ContentCard")
 
         layout = QVBoxLayout(card)
-        layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(12)
-
-        buttons_grid = QGridLayout()
-        buttons_grid.setHorizontalSpacing(8)
-        buttons_grid.setVerticalSpacing(8)
-        buttons_grid.addWidget(self.new_question_button, 0, 0)
-        buttons_grid.addWidget(self.question_up_button, 0, 1)
-        buttons_grid.addWidget(self.question_down_button, 1, 0)
-        buttons_grid.addWidget(self.delete_question_button, 1, 1)
-
-        form_layout = QFormLayout()
-        form_layout.setContentsMargins(0, 0, 0, 0)
-        form_layout.setSpacing(10)
-        form_layout.addRow("Тип", self.question_type_combo)
-        form_layout.addRow("Текст вопроса", self.question_prompt_input)
-        form_layout.addRow("Очки", self.question_points_input)
-        form_layout.addRow("Таймер", self.question_timer_input)
-        form_layout.addRow("Заметка для ведущего", self.question_notes_input)
-        form_layout.addRow("Правильный ответ", self.question_answer_stack)
-        form_layout.addRow("Варианты ответа", self.options_widget)
-
-        media_layout = QVBoxLayout()
-        media_layout.setSpacing(12)
-        media_layout.addWidget(
-            self._build_question_media_card(
-                "Медиа вопроса",
-                self.question_media_info_label,
-                self.add_question_media_button,
-                self.open_question_media_button,
-                self.remove_question_media_button,
-            )
-        )
-        media_layout.addWidget(
-            self._build_question_media_card(
-                "Медиа ответа",
-                self.answer_media_info_label,
-                self.add_answer_media_button,
-                self.open_answer_media_button,
-                self.remove_answer_media_button,
-            )
-        )
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
 
         title = QLabel("Вопросы раунда")
         title.setObjectName("SectionCaption")
         layout.addWidget(title)
         layout.addWidget(self.question_hint_label)
-        layout.addLayout(buttons_grid)
         layout.addWidget(self.questions_list, 1)
-        layout.addLayout(form_layout)
-        layout.addLayout(media_layout)
-        layout.addWidget(self.save_question_button)
-        layout.addWidget(self.question_info_label)
         return card
 
     def _connect_signals(self) -> None:
@@ -679,6 +699,8 @@ class GamesPage(QWidget):
         self.start_game_button.clicked.connect(self._start_selected_game)
         self.back_to_games_button.clicked.connect(self.show_dashboard)
         self.open_media_button.clicked.connect(self._open_media_for_current_game)
+        self.game_media_drop_zone.files_dropped.connect(self._import_game_media_files)
+        self.game_media_drop_zone.browse_requested.connect(self._browse_common_media_files)
         self.add_question_media_button.clicked.connect(
             lambda: self._attach_media_to_current_question("question")
         )
@@ -1278,11 +1300,14 @@ class GamesPage(QWidget):
         rounds = self.round_service.list_rounds_by_game(game.id) if game is not None else []
         for round_item in rounds:
             question_count = len(self.question_service.list_questions_by_round(round_item.id))
-            item = QListWidgetItem(
-                f"{round_item.order_index}. {round_item.title}\nВопросов: {question_count}"
-            )
+            item = QListWidgetItem()
             item.setData(Qt.UserRole, round_item.id)
+            item.setSizeHint(QSize(0, 60))
             self.rounds_list.addItem(item)
+            self.rounds_list.setItemWidget(
+                item,
+                self._build_round_item_widget(item, round_item, question_count),
+            )
         self.rounds_list.blockSignals(False)
 
         if not rounds:
@@ -1305,6 +1330,7 @@ class GamesPage(QWidget):
                     break
         self.rounds_list.setCurrentRow(target_row)
         self._handle_round_selection_changed(preferred_question_id=preferred_question_id)
+        self._refresh_inline_selection_styles(self.rounds_list)
 
     def _handle_round_selection_changed(
         self,
@@ -1320,6 +1346,7 @@ class GamesPage(QWidget):
             self._clear_question_form()
             self._update_editor_state()
             self._loading_state = False
+            self._refresh_inline_selection_styles(self.rounds_list)
             self.selection_changed.emit()
             return
 
@@ -1338,6 +1365,7 @@ class GamesPage(QWidget):
         self._load_questions(preferred_question_id=preferred_question_id)
         self._update_editor_state()
         self._loading_state = False
+        self._refresh_inline_selection_styles(self.rounds_list)
         self.selection_changed.emit()
 
     def _load_questions(self, preferred_question_id: int | None = None) -> None:
@@ -1351,12 +1379,14 @@ class GamesPage(QWidget):
             else []
         )
         for question in questions:
-            item = QListWidgetItem(
-                f"{question.order_index}. [{question.question_type.upper()}] {self._question_preview(question.prompt)}\n"
-                f"Очки: {question.points} | Таймер: {self._question_timer_label(question.timer_seconds)}"
-            )
+            item = QListWidgetItem()
             item.setData(Qt.UserRole, question.id)
+            item.setSizeHint(QSize(0, 72))
             self.questions_list.addItem(item)
+            self.questions_list.setItemWidget(
+                item,
+                self._build_question_item_widget(item, question),
+            )
         self.questions_list.blockSignals(False)
 
         if not questions:
@@ -1377,6 +1407,7 @@ class GamesPage(QWidget):
                     break
         self.questions_list.setCurrentRow(target_row)
         self._handle_question_selection_changed()
+        self._refresh_inline_selection_styles(self.questions_list)
 
     def _handle_question_selection_changed(self) -> None:
         self.flush_autosave()
@@ -1387,6 +1418,7 @@ class GamesPage(QWidget):
             self._clear_question_form()
             self._update_editor_state()
             self._loading_state = False
+            self._refresh_inline_selection_styles(self.questions_list)
             self.selection_changed.emit()
             return
 
@@ -1419,6 +1451,7 @@ class GamesPage(QWidget):
         self._set_question_info_label(question)
         self._update_editor_state()
         self._loading_state = False
+        self._refresh_inline_selection_styles(self.questions_list)
         self.selection_changed.emit()
 
     def _select_round(self, round_id: int | None) -> None:
@@ -1447,17 +1480,10 @@ class GamesPage(QWidget):
         media_count = len(self.media_service.list_media_by_game(game.id))
         teams_count = len(self.team_service.list_teams_by_game(game.id))
 
-        self.game_meta_label.setText(
-            f"Название: {game.title}\n\n"
-            f"Описание: {game.description or 'Описание пока не заполнено.'}\n\n"
-            f"Создано: {game.created_at}\n"
-            f"Обновлено: {game.updated_at}"
-        )
+        description = game.description.strip() if game.description else ""
+        self.game_meta_label.setText(description or "Без описания.")
         self.game_stats_label.setText(
-            f"Раундов: {len(rounds)}\n"
-            f"Вопросов: {questions_count}\n"
-            f"Медиа: {media_count}\n"
-            f"Команд: {teams_count}"
+            f"Раундов: {len(rounds)} · Вопросов: {questions_count} · Файлов: {media_count} · Команд: {teams_count} · Ручное проведение"
         )
         self._set_dashboard_game_state(
             game,
@@ -1667,7 +1693,7 @@ class GamesPage(QWidget):
         self._clear_grid_layout(self.game_media_buttons_layout)
         if game is None:
             self.game_media_state_label.setText(
-                "Сначала сохраните игру. Здесь появятся общие файлы: заставка, правила, партнёры, музыка ожидания."
+                "Сначала сохраните игру."
             )
             return
 
@@ -1678,16 +1704,16 @@ class GamesPage(QWidget):
         ]
         if not game_level_media:
             self.game_media_state_label.setText(
-                "Пока нет общих файлов игры. Добавьте сюда заставку, правила, спонсорские ролики, музыку ожидания и другие медиа."
+                "Пока нет общих файлов."
             )
             return
 
         self.game_media_state_label.setText(
-            "Общие файлы игры видны прямо здесь. Их можно использовать позже в режиме проведения игры."
+            f"Общих файлов: {len(game_level_media)}"
         )
         for index, media in enumerate(game_level_media):
             button = QPushButton(self._game_media_button_text(media))
-            button.setMinimumHeight(48)
+            button.setMinimumHeight(40)
             button.setObjectName("SecondaryButton")
             button.clicked.connect(
                 lambda _checked=False, path=media.file_path: self._open_local_media_preview(path)
@@ -1698,7 +1724,7 @@ class GamesPage(QWidget):
                 "audio": "Link",
             }.get(media.media_type, "Link")
             apply_button_icon(button, icon_name, color="#173b86")
-            self.game_media_buttons_layout.addWidget(button, index // 3, index % 3)
+            self.game_media_buttons_layout.addWidget(button, index // 4, index % 4)
 
     @staticmethod
     def _format_session_date(raw_value: str) -> str:
@@ -1708,26 +1734,17 @@ class GamesPage(QWidget):
 
     def _set_round_info_label(self, round_item: Round) -> None:
         self.round_info_label.setText(
-            f"Раунд {round_item.order_index}.\n"
-            f"{round_item.notes or 'Заметка для ведущего пока не заполнена.'}"
+            f"Выбран раунд: {round_item.title}"
         )
 
     def _set_question_info_label(self, question: Question) -> None:
         self.question_info_label.setText(
-            f"Тип: {'Открытый' if question.question_type == 'open' else 'ABCD'}\n"
-            f"Правильный ответ: {question.answer}\n"
-            f"Таймер: {self._question_timer_label(question.timer_seconds)}\n"
-            f"{question.notes or 'Заметка для ведущего пока не заполнена.'}"
+            f"Выбран вопрос: {question.title}"
         )
 
     @staticmethod
     def _game_media_button_text(media) -> str:
-        prefix = {
-            "video": "Видео",
-            "image": "Картинка",
-            "audio": "Аудио",
-        }.get(media.media_type, "Файл")
-        return f"{prefix}\n{media.title}"
+        return media.title
 
     def _open_local_media_preview(self, file_path: str) -> None:
         if not QDesktopServices.openUrl(QUrl.fromLocalFile(file_path)):
@@ -1774,6 +1791,7 @@ class GamesPage(QWidget):
         self.duplicate_game_button.setEnabled(has_game)
         self.delete_game_button.setEnabled(has_game)
         self.open_media_button.setEnabled(has_game)
+        self.game_media_drop_zone.set_drop_enabled(has_game)
 
         self.round_title_input.setEnabled(has_game)
         self.round_notes_input.setEnabled(has_game)
@@ -1832,6 +1850,108 @@ class GamesPage(QWidget):
     def _question_preview(self, prompt: str) -> str:
         normalized = " ".join(prompt.split())
         return normalized[:64] + ("..." if len(normalized) > 64 else "")
+
+    def _build_round_item_widget(
+        self,
+        item: QListWidgetItem,
+        round_item: Round,
+        question_count: int,
+    ) -> QWidget:
+        card = QFrame()
+        card.setObjectName("CompactListCard")
+        card.setProperty("selected", False)
+
+        layout = QHBoxLayout(card)
+        layout.setContentsMargins(12, 8, 12, 8)
+        layout.setSpacing(8)
+
+        text_layout = QVBoxLayout()
+        text_layout.setSpacing(2)
+        title = QLabel(f"{round_item.order_index}. {round_item.title}")
+        title.setObjectName("CompactListTitle")
+        meta = QLabel(f"Вопросов: {question_count}")
+        meta.setObjectName("CompactListMeta")
+        text_layout.addWidget(title)
+        text_layout.addWidget(meta)
+
+        edit_button = QPushButton()
+        edit_button.setObjectName("CardIconButton")
+        edit_button.setFixedSize(36, 36)
+        apply_button_icon(edit_button, "Book_Open", color="#2f3542")
+
+        def select_item(_event=None) -> None:
+            self.rounds_list.setCurrentItem(item)
+
+        def edit_round(_checked: bool = False) -> None:
+            self.rounds_list.setCurrentItem(item)
+            self.edit_round_requested.emit(round_item.id)
+
+        card.mousePressEvent = select_item
+        title.mousePressEvent = select_item
+        meta.mousePressEvent = select_item
+        edit_button.clicked.connect(edit_round)
+
+        layout.addLayout(text_layout, 1)
+        layout.addWidget(edit_button)
+        return card
+
+    def _build_question_item_widget(
+        self,
+        item: QListWidgetItem,
+        question: Question,
+    ) -> QWidget:
+        card = QFrame()
+        card.setObjectName("CompactListCard")
+        card.setProperty("selected", False)
+
+        layout = QHBoxLayout(card)
+        layout.setContentsMargins(12, 8, 12, 8)
+        layout.setSpacing(8)
+
+        text_layout = QVBoxLayout()
+        text_layout.setSpacing(2)
+        title = QLabel(f"{question.order_index}. {question.title}")
+        title.setObjectName("CompactListTitle")
+        meta = QLabel(
+            f"{self._question_preview(question.prompt)} · {question.points} очк. · {self._question_timer_label(question.timer_seconds)}"
+        )
+        meta.setObjectName("CompactListMeta")
+        text_layout.addWidget(title)
+        text_layout.addWidget(meta)
+
+        edit_button = QPushButton()
+        edit_button.setObjectName("CardIconButton")
+        edit_button.setFixedSize(36, 36)
+        apply_button_icon(edit_button, "Book_Open", color="#2f3542")
+
+        def select_item(_event=None) -> None:
+            self.questions_list.setCurrentItem(item)
+
+        def edit_question(_checked: bool = False) -> None:
+            self.questions_list.setCurrentItem(item)
+            self.edit_question_requested.emit(question.id)
+
+        card.mousePressEvent = select_item
+        title.mousePressEvent = select_item
+        meta.mousePressEvent = select_item
+        edit_button.clicked.connect(edit_question)
+
+        layout.addLayout(text_layout, 1)
+        layout.addWidget(edit_button)
+        return card
+
+    def _refresh_inline_selection_styles(self, list_widget: QListWidget) -> None:
+        current_item = list_widget.currentItem()
+        current_id = current_item.data(Qt.UserRole) if current_item is not None else None
+        for index in range(list_widget.count()):
+            item = list_widget.item(index)
+            widget = list_widget.itemWidget(item)
+            if widget is None:
+                continue
+            widget.setProperty("selected", item.data(Qt.UserRole) == current_id)
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
+            widget.update()
 
     def _question_timer_label(self, timer_seconds: int) -> str:
         if timer_seconds <= 0:
@@ -2014,6 +2134,51 @@ class GamesPage(QWidget):
             return True
         self._save_question()
         return self.current_question_id is not None
+
+    def _browse_common_media_files(self) -> None:
+        if self.current_game_id is None:
+            QMessageBox.warning(self, "Общие файлы", "Сначала сохраните игру.")
+            return
+
+        file_paths, _ = QFileDialog.getOpenFileNames(
+            self,
+            "Выберите общие файлы игры",
+            "",
+            "Медиафайлы (*.png *.jpg *.jpeg *.webp *.mp4 *.webm *.mp3 *.wav *.ogg)",
+        )
+        if not file_paths:
+            return
+        self._import_game_media_files(file_paths)
+
+    def _import_game_media_files(self, file_paths: list[str]) -> None:
+        if self.current_game_id is None:
+            QMessageBox.warning(self, "Общие файлы", "Сначала сохраните игру.")
+            return
+
+        imported_count = 0
+        errors: list[str] = []
+        for file_path in file_paths:
+            try:
+                self.media_service.import_media(
+                    game_id=self.current_game_id,
+                    title=Path(file_path).stem,
+                    source_path=file_path,
+                    usage_role="library",
+                )
+                imported_count += 1
+            except ValueError as error:
+                errors.append(f"{Path(file_path).name}: {error}")
+
+        if imported_count:
+            game = self.get_selected_game()
+            if game is not None:
+                self._update_game_overview(game)
+                self._update_game_media_overview(game)
+            self.autosave_status_changed.emit(f"Общие файлы: добавлено {imported_count}")
+            self.data_changed.emit()
+
+        if errors and imported_count == 0:
+            QMessageBox.warning(self, "Общие файлы", "\n".join(errors[:3]))
 
     def _attach_media_to_current_question(self, usage_role: str) -> None:
         if self.current_game_id is None or self.current_round_id is None:

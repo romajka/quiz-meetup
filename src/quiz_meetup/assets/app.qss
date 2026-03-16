@@ -203,6 +203,15 @@ QPushButton#SecondaryButton:hover {
     background: #e5e9f1;
 }
 
+QPushButton#SecondaryButton:checked {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #c62828, stop:1 #e53935);
+    color: #ffffff;
+}
+
+QPushButton#SecondaryButton:checked:hover {
+    background: #b71c1c;
+}
+
 QPushButton#AccentButton {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #c62828, stop:1 #e53935);
 }
@@ -271,6 +280,46 @@ QFrame#GameListCard {
 QFrame#GameListCard[selected="true"] {
     border: 1px solid #f2c6cb;
     background: #fffafb;
+}
+
+QFrame#CompactListCard {
+    background: #f8fafc;
+    border: 1px solid #e8edf5;
+    border-radius: 18px;
+}
+
+QFrame#CompactListCard[selected="true"] {
+    background: #fff7f7;
+    border: 1px solid #f0c8cd;
+}
+
+QLabel#CompactListTitle {
+    color: #202633;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+QLabel#CompactListMeta {
+    color: #7b8797;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+QFrame#GameMediaDropZone {
+    background: #fbfcfe;
+    border: 1px dashed #d9e2ef;
+    border-radius: 18px;
+}
+
+QFrame#GameMediaDropZone[dragActive="true"] {
+    background: #fff7f7;
+    border: 1px dashed #d23b3b;
+}
+
+QLabel#DropZoneTitle {
+    color: #202633;
+    font-size: 14px;
+    font-weight: 700;
 }
 
 QLabel#GameCardBadge {
@@ -513,9 +562,10 @@ QTableWidget#ProjectorScoreTable::item {
 }
 
 QTableWidget#ProjectorScoreTable QHeaderView::section {
-    background: rgba(255, 255, 255, 0.1);
-    color: #eff6ff;
+    background: #22354f;
+    color: #ffffff;
     border: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
     padding: 16px 14px;
     font-weight: 700;
 }

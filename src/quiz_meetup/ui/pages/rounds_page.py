@@ -186,6 +186,16 @@ class RoundsPage(QWidget):
         if index >= 0:
             self.game_combo.setCurrentIndex(index)
 
+    def open_round(self, round_id: int | None) -> None:
+        if round_id is None:
+            return
+        round_item = self.round_service.get_round(round_id)
+        if round_item is None:
+            return
+        self.refresh()
+        self.set_current_game(round_item.game_id)
+        self._restore_round_selection(round_id)
+
     def get_selected_round(self) -> Round | None:
         if self.current_round_id is None:
             return None

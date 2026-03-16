@@ -381,6 +381,21 @@ class QuestionsPage(QWidget):
         if index >= 0:
             self.round_combo.setCurrentIndex(index)
 
+    def open_question(self, question_id: int | None) -> None:
+        if question_id is None:
+            return
+        question = self.question_service.get_question(question_id)
+        if question is None:
+            return
+        round_item = self.round_service.get_round(question.round_id)
+        if round_item is None:
+            return
+        self.refresh()
+        index = self.round_combo.findData(round_item.id)
+        if index >= 0:
+            self.round_combo.setCurrentIndex(index)
+        self._restore_question_selection(question_id)
+
     def get_selected_question(self) -> Question | None:
         if self.current_question_id is None:
             return None

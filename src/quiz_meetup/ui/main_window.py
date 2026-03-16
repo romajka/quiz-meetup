@@ -257,6 +257,8 @@ class MainWindow(QMainWindow):
         self.games_page.data_changed.connect(self.refresh_all_pages)
         self.games_page.autosave_status_changed.connect(self._set_autosave_status)
         self.games_page.open_media_requested.connect(self.open_media_page_for_current_game)
+        self.games_page.edit_round_requested.connect(self.open_round_editor_from_games)
+        self.games_page.edit_question_requested.connect(self.open_question_editor_from_games)
         self.games_page.view_changed.connect(self.refresh_context_panels)
         self.games_page.start_game_requested.connect(self.start_game_session)
         self.games_page.start_new_session_requested.connect(self.start_new_session)
@@ -302,6 +304,7 @@ class MainWindow(QMainWindow):
             self.show_previous_question
         )
         self.game_control_page.show_media_requested.connect(self.show_game_media_asset)
+        self.game_control_page.select_round_by_id_requested.connect(self.select_round_in_control_panel)
         self.game_control_page.show_round_by_id_requested.connect(self.show_round_by_id)
         self.game_control_page.show_question_by_id_requested.connect(self.show_question_by_id)
         self.game_control_page.show_answer_by_id_requested.connect(self.show_answer_by_id)
@@ -348,6 +351,7 @@ class MainWindow(QMainWindow):
         round_item = self._resolve_active_round()
         question = self._resolve_active_question()
         scene = self.services.presentation_service.state.scene
+        projector_title = self.services.presentation_service.state.title
         timer_state = self.services.timer_service.state
 
         round_questions = (
@@ -360,6 +364,7 @@ class MainWindow(QMainWindow):
             round_item,
             question,
             scene,
+            projector_title,
             self.services.presentation_service.state.music_status,
             timer_state.display_text if timer_state.total_seconds > 0 else "--:--",
             timer_state.source_label or "Таймер не подготовлен",
@@ -461,6 +466,16 @@ class MainWindow(QMainWindow):
         self.set_section(3)
         if game is not None:
             self.media_page.set_current_game(game.id)
+
+    def open_round_editor_from_games(self, round_id: int) -> None:
+        self.set_section(1)
+        self.rounds_page.open_round(round_id)
+        self.refresh_context_panels()
+
+    def open_question_editor_from_games(self, question_id: int) -> None:
+        self.set_section(2)
+        self.questions_page.open_question(question_id)
+        self.refresh_context_panels()
 
     def open_projector_window(self, full_screen: bool | None = None) -> None:
         if self._resolve_active_game() is None:
@@ -787,6 +802,13 @@ class MainWindow(QMainWindow):
             self.games_page._select_round(round_id)
         self.refresh_context_panels()
         self.show_selected_round()
+
+    def select_round_in_control_panel(self, round_id: int) -> None:
+        if round_id <= 0:
+            return
+        if hasattr(self.games_page, "_select_round"):
+            self.games_page._select_round(round_id)
+        self.refresh_context_panels()
 
     def show_question_by_id(self, question_id: int) -> None:
         if question_id <= 0:

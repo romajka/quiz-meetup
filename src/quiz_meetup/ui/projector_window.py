@@ -634,7 +634,7 @@ class ProjectorWindow(QMainWindow):
 
     def _fill_score_table(self, state: PresentationState) -> None:
         headers = state.table_headers or ["#", "Команда", "Всего"]
-        self.score_table.clear()
+        self.score_table.clearContents()
         self.score_table.setColumnCount(len(headers))
         self.score_table.setHorizontalHeaderLabels(headers)
         self.score_table.setRowCount(len(state.table_rows))
@@ -645,6 +645,11 @@ class ProjectorWindow(QMainWindow):
             header_item = QTableWidgetItem(headers[column_index])
             header_item.setTextAlignment(Qt.AlignCenter)
             header_item.setForeground(QColor("#f8fafc"))
+            header_item.setBackground(QColor("#22354f"))
+            header_font = header_item.font()
+            header_font.setBold(True)
+            header_font.setPointSize(13)
+            header_item.setFont(header_font)
             self.score_table.setHorizontalHeaderItem(column_index, header_item)
 
         for row_index, row_values in enumerate(state.table_rows):

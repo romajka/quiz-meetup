@@ -41,6 +41,7 @@ class GameControlPage(QWidget):
     next_question_requested = Signal()
     previous_question_requested = Signal()
     show_media_requested = Signal(int)
+    select_round_by_id_requested = Signal(int)
     show_round_by_id_requested = Signal(int)
     show_question_by_id_requested = Signal(int)
     show_answer_by_id_requested = Signal(int)
@@ -54,6 +55,8 @@ class GameControlPage(QWidget):
 
     def __init__(self) -> None:
         super().__init__()
+
+        self.screen_toggle_buttons: dict[str, QPushButton] = {}
 
         self.current_game_label = QLabel("Игра не выбрана")
         self.current_game_label.setObjectName("DetailsLabel")
@@ -167,20 +170,17 @@ class GameControlPage(QWidget):
             self._build_card(
                 "2. Управление экраном игры",
                 [
-                    self._build_button_grid(
+                    self._build_toggle_grid(
                         [
-                            ("Показать заставку", self.show_splash_requested, "SecondaryButton", "Star"),
-                            ("Показать ожидание", self.show_waiting_requested, "SecondaryButton", "Link"),
-                            ("Показать таблицу", self.show_scores_requested, "AccentButton", "Chart_Bar_Vertical_01"),
-                            ("Скрыть таблицу", self.hide_scores_requested, "SecondaryButton", "Filter"),
-                            ("Показать QR-код", self.show_qr_requested, "SecondaryButton", "Command"),
-                            ("Показать колонку очков", self.show_score_column_requested, "SecondaryButton", "Chart_Bar_Vertical_01"),
-                            ("Скрыть колонку очков", self.hide_score_column_requested, "SecondaryButton", "Filter"),
-                            ("Представить команды", self.show_teams_requested, "SecondaryButton", "Main_Component"),
-                            ("Показать победителей", self.show_winners_requested, "SecondaryButton", "Check_All_Big"),
-                            ("Спонсорский блок", self.play_sponsor_requested, "SecondaryButton", "Book_Open"),
-                            ("Включить музыку", self.play_background_music_requested, "SecondaryButton", "Link"),
-                            ("Остановить музыку", self.stop_background_music_requested, "SecondaryButton", "Exit"),
+                            ("splash", "Показать заставку", self.show_splash_requested, self.show_waiting_requested, "Star"),
+                            ("waiting", "Показать ожидание", self.show_waiting_requested, self.show_splash_requested, "Link"),
+                            ("scores", "Показать таблицу", self.show_scores_requested, self.hide_scores_requested, "Chart_Bar_Vertical_01"),
+                            ("qr", "Показать QR-код", self.show_qr_requested, self.show_waiting_requested, "Command"),
+                            ("score_column", "Показать колонку очков", self.show_score_column_requested, self.hide_score_column_requested, "Chart_Bar_Vertical_01"),
+                            ("teams", "Представить команды", self.show_teams_requested, self.show_waiting_requested, "Main_Component"),
+                            ("winners", "Показать победителей", self.show_winners_requested, self.show_waiting_requested, "Check_All_Big"),
+                            ("sponsor", "Спонсорский блок", self.play_sponsor_requested, self.show_waiting_requested, "Book_Open"),
+                            ("music", "Фоновая музыка", self.play_background_music_requested, self.stop_background_music_requested, "Link"),
                         ],
                         columns=3,
                         min_height=52,
@@ -329,6 +329,38 @@ class GameControlPage(QWidget):
             grid.addWidget(button, index // columns, index % columns)
         return widget
 
+    def _build_toggle_grid(
+        self,
+        buttons: list[tuple[str, str, Signal, Signal, str | None]],
+        columns: int,
+        min_height: int,
+    ) -> QWidget:
+        widget = QWidget()
+        grid = QGridLayout(widget)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(12)
+        grid.setVerticalSpacing(12)
+        for index, (key, title, on_signal, off_signal, icon_name) in enumerate(buttons):
+            button = QPushButton(title)
+            button.setMinimumHeight(min_height)
+            button.setObjectName("SecondaryButton")
+            button.setCheckable(True)
+            button.clicked.connect(
+                lambda checked, current_on=on_signal, current_off=off_signal: (
+                    current_on.emit() if checked else current_off.emit()
+                )
+            )
+            if icon_name:
+                button.toggled.connect(
+                    lambda checked, current_button=button, current_icon=icon_name: self._update_toggle_icon(
+                        current_button, current_icon, checked
+                    )
+                )
+                self._update_toggle_icon(button, icon_name, False)
+            self.screen_toggle_buttons[key] = button
+            grid.addWidget(button, index // columns, index % columns)
+        return widget
+
     def _build_timer_controls(self) -> QWidget:
         widget = QWidget()
         grid = QGridLayout(widget)
@@ -371,12 +403,20 @@ class GameControlPage(QWidget):
             color=color_by_style.get(style_name, "#ffffff"),
         )
 
+    def _update_toggle_icon(self, button: QPushButton, icon_name: str, checked: bool) -> None:
+        apply_button_icon(
+            button,
+            icon_name,
+            color="#ffffff" if checked else "#173b86",
+        )
+
     def update_context(
         self,
         game: Game | None,
         round_item: Round | None,
         question: Question | None,
         projector_scene: str,
+        projector_title: str,
         music_status: str,
         timer_value: str,
         timer_source: str,
@@ -412,6 +452,7 @@ class GameControlPage(QWidget):
         self.timer_value_label.setText(timer_value or "--:--")
         self.timer_source_label.setText(timer_source or "Таймер не подготовлен")
         self.timer_status_label.setText(timer_status or "Статус таймера: не запущен")
+        self._sync_screen_toggles(projector_scene, projector_title, bool(music_status))
 
     def update_dashboard(
         self,
@@ -514,7 +555,7 @@ class GameControlPage(QWidget):
             button.setMinimumHeight(56)
             button.setObjectName("LargeActionButton" if is_selected else "SecondaryButton")
             button.clicked.connect(
-                lambda _checked=False, round_id=round_item.id: self.show_round_by_id_requested.emit(round_id)
+                lambda _checked=False, round_id=round_item.id: self.select_round_by_id_requested.emit(round_id)
             )
             apply_button_icon(
                 button,
@@ -667,3 +708,39 @@ class GameControlPage(QWidget):
             widget = item.widget()
             if widget is not None:
                 widget.deleteLater()
+
+    def _sync_screen_toggles(
+        self,
+        projector_scene: str,
+        projector_title: str,
+        music_active: bool,
+    ) -> None:
+        active_states = {
+            "splash": projector_scene == "welcome",
+            "waiting": projector_scene == "waiting",
+            "scores": projector_scene == "scores" and projector_title != "Колонка очков",
+            "score_column": projector_scene == "scores" and projector_title == "Колонка очков",
+            "qr": projector_scene == "game" and projector_title == "Код подключения игроков",
+            "teams": projector_scene == "teams",
+            "winners": projector_scene == "winners",
+            "sponsor": projector_scene == "partner",
+            "music": music_active,
+        }
+        for key, button in self.screen_toggle_buttons.items():
+            should_check = active_states.get(key, False)
+            button.blockSignals(True)
+            button.setChecked(should_check)
+            button.blockSignals(False)
+            icon_name = {
+                "splash": "Star",
+                "waiting": "Link",
+                "scores": "Chart_Bar_Vertical_01",
+                "score_column": "Chart_Bar_Vertical_01",
+                "qr": "Command",
+                "teams": "Main_Component",
+                "winners": "Check_All_Big",
+                "sponsor": "Book_Open",
+                "music": "Link",
+            }.get(key)
+            if icon_name:
+                self._update_toggle_icon(button, icon_name, should_check)
