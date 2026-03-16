@@ -118,3 +118,4 @@ dist\QuizMeetup\QuizMeetup.exe
 - [start_windows.ps1](/home/ramin/quiz-meetup/start_windows.ps1) — запуск через PowerShell
 - [src/quiz_meetup/__main__.py](/home/ramin/quiz-meetup/src/quiz_meetup/__main__.py) — запуск через `python -m quiz_meetup`
 # quiz-meetup
+# quiz-meetup
