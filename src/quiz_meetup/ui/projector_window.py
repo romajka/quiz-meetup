@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from html import escape
 from pathlib import Path
 
 from PySide6.QtCore import (
@@ -21,6 +22,7 @@ from PySide6.QtMultimediaWidgets import QVideoWidget
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFrame,
+    QGraphicsDropShadowEffect,
     QGraphicsOpacityEffect,
     QGridLayout,
     QHeaderView,
@@ -141,6 +143,7 @@ class ProjectorWindow(QMainWindow):
         self.music_audio: QAudioOutput | None = None
 
         self._timer_bar_animation = QPropertyAnimation(self)
+        self._question_timer_bar_animation = QPropertyAnimation(self)
         self._active_animations: list[QSequentialAnimationGroup | QParallelAnimationGroup | QPropertyAnimation] = []
         self._last_content_signature: tuple | None = None
 
@@ -166,12 +169,16 @@ class ProjectorWindow(QMainWindow):
         self.transition_overlay.setGraphicsEffect(self.transition_opacity)
 
         self._all_animated_widgets = [
+            self.rich_top_left,
+            self.rich_top_right,
             self.rich_logo,
             self.rich_title,
             self.rich_subtitle,
             self.rich_badge,
             self.rich_music_status,
             self.rich_timer_frame,
+            self.question_timer_frame,
+            self.rich_text_panel,
             self.rich_body,
             self.media_stack,
             self.options_frame,
@@ -203,6 +210,7 @@ class ProjectorWindow(QMainWindow):
         widget = QWidget()
         layout = QStackedLayout(widget)
         layout.setStackingMode(QStackedLayout.StackAll)
+        self.rich_screen_layout = layout
 
         self.background_stack = QStackedWidget()
         self.background_base = QWidget()
@@ -214,9 +222,33 @@ class ProjectorWindow(QMainWindow):
         self.background_stack.addWidget(self.background_image)
 
         overlay = QWidget()
+        self.rich_overlay = overlay
+        overlay.setAttribute(Qt.WA_StyledBackground, True)
+        overlay.setStyleSheet("background: transparent;")
         overlay_layout = QVBoxLayout(overlay)
         overlay_layout.setContentsMargins(88, 52, 88, 52)
         overlay_layout.setSpacing(18)
+        self.rich_overlay_layout = overlay_layout
+
+        top_row = QWidget()
+        top_row.setAttribute(Qt.WA_StyledBackground, True)
+        top_row.setStyleSheet("background: transparent;")
+        top_row_layout = QHBoxLayout(top_row)
+        top_row_layout.setContentsMargins(0, 0, 0, 0)
+        top_row_layout.setSpacing(16)
+
+        self.rich_top_left = QLabel()
+        self.rich_top_left.setObjectName("ProjectorTopMeta")
+        self.rich_top_left.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.rich_top_left.hide()
+
+        self.rich_top_right = QLabel()
+        self.rich_top_right.setObjectName("ProjectorTopMeta")
+        self.rich_top_right.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.rich_top_right.hide()
+
+        top_row_layout.addWidget(self.rich_top_left, 1)
+        top_row_layout.addWidget(self.rich_top_right, 1)
 
         self.rich_logo = ScaledPixmapLabel(minimum_height=92)
         self.rich_logo.setObjectName("ProjectorLogo")
@@ -251,6 +283,8 @@ class ProjectorWindow(QMainWindow):
         self.rich_timer_circle = CircularTimerWidget()
 
         timer_text_column = QWidget()
+        timer_text_column.setAttribute(Qt.WA_StyledBackground, True)
+        timer_text_column.setStyleSheet("background: transparent;")
         timer_text_layout = QVBoxLayout(timer_text_column)
         timer_text_layout.setContentsMargins(0, 0, 0, 0)
         timer_text_layout.setSpacing(10)
@@ -277,10 +311,50 @@ class ProjectorWindow(QMainWindow):
         rich_timer_layout.addWidget(timer_text_column, 1)
         self.rich_timer_frame.hide()
 
+        self.question_timer_frame = QFrame()
+        self.question_timer_frame.setObjectName("ProjectorQuestionTimerFrame")
+        question_timer_layout = QVBoxLayout(self.question_timer_frame)
+        question_timer_layout.setContentsMargins(18, 16, 18, 16)
+        question_timer_layout.setSpacing(10)
+
+        question_timer_header = QWidget()
+        question_timer_header.setAttribute(Qt.WA_StyledBackground, True)
+        question_timer_header.setStyleSheet("background: transparent;")
+        question_timer_header_layout = QHBoxLayout(question_timer_header)
+        question_timer_header_layout.setContentsMargins(0, 0, 0, 0)
+        question_timer_header_layout.setSpacing(12)
+
+        self.question_timer_source = QLabel()
+        self.question_timer_source.setObjectName("ProjectorQuestionTimerSource")
+        self.question_timer_source.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+
+        self.question_timer_value = QLabel("00:00")
+        self.question_timer_value.setObjectName("ProjectorQuestionTimerValue")
+        self.question_timer_value.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        question_timer_header_layout.addWidget(self.question_timer_source, 1)
+        question_timer_header_layout.addWidget(self.question_timer_value, 0)
+
+        self.question_timer_progress = QProgressBar()
+        self.question_timer_progress.setObjectName("ProjectorQuestionTimerProgress")
+        self.question_timer_progress.setRange(0, 100)
+        self.question_timer_progress.setTextVisible(False)
+
+        question_timer_layout.addWidget(question_timer_header)
+        question_timer_layout.addWidget(self.question_timer_progress)
+        self.question_timer_frame.hide()
+
         self.rich_body = QLabel()
         self.rich_body.setObjectName("ProjectorBody")
         self.rich_body.setAlignment(Qt.AlignCenter)
         self.rich_body.setWordWrap(True)
+
+        self.rich_text_panel = QLabel()
+        self.rich_text_panel.setObjectName("ProjectorBody")
+        self.rich_text_panel.setAlignment(Qt.AlignCenter)
+        self.rich_text_panel.setWordWrap(True)
+        self.rich_text_panel.setTextFormat(Qt.RichText)
+        self.rich_text_panel.hide()
 
         self.media_stack = QStackedWidget()
         self.media_placeholder = QLabel("Медиа для этого экрана не назначено.")
@@ -325,20 +399,25 @@ class ProjectorWindow(QMainWindow):
         self.rich_footer.setAlignment(Qt.AlignCenter)
         self.rich_footer.setWordWrap(True)
 
+        overlay_layout.addWidget(top_row)
         overlay_layout.addWidget(self.rich_logo, alignment=Qt.AlignCenter)
         overlay_layout.addWidget(self.rich_title)
         overlay_layout.addWidget(self.rich_subtitle)
         overlay_layout.addWidget(self.rich_badge, alignment=Qt.AlignCenter)
         overlay_layout.addWidget(self.rich_music_status, alignment=Qt.AlignCenter)
         overlay_layout.addWidget(self.rich_timer_frame)
-        overlay_layout.addWidget(self.rich_body)
         overlay_layout.addWidget(self.media_stack, 1)
+        overlay_layout.addWidget(self.rich_text_panel)
+        overlay_layout.addWidget(self.rich_body)
         overlay_layout.addWidget(self.options_frame)
         overlay_layout.addWidget(self.answer_label)
         overlay_layout.addWidget(self.rich_footer)
+        overlay_layout.addWidget(self.question_timer_frame)
 
         layout.addWidget(self.background_stack)
         layout.addWidget(overlay)
+        layout.setCurrentWidget(overlay)
+        overlay.raise_()
         return widget
 
     def _build_score_screen(self) -> QWidget:
@@ -369,15 +448,35 @@ class ProjectorWindow(QMainWindow):
         self.score_table.setHorizontalHeaderLabels(["Команда", "Очки"])
         self.score_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.score_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        self.score_table.horizontalHeader().setStyleSheet(
-            "QHeaderView::section {"
-            "background: rgba(255, 255, 255, 0.12);"
+        self.score_table.setStyleSheet(
+            "QTableWidget#ProjectorScoreTable {"
+            "background: rgba(255, 255, 255, 0.08);"
             "color: #f8fafc;"
+            "border: 1px solid rgba(255, 255, 255, 0.16);"
+            "border-radius: 24px;"
+            "gridline-color: rgba(255, 255, 255, 0.08);"
+            "font-size: 24px;"
+            "padding: 10px;"
+            "}"
+            "QTableWidget#ProjectorScoreTable::item {"
+            "padding: 16px;"
+            "border-bottom: 1px solid rgba(255, 255, 255, 0.10);"
+            "}"
+            "QTableWidget#ProjectorScoreTable QHeaderView::section {"
+            "background-color: #22354f;"
+            "color: #ffffff;"
             "border: none;"
+            "border-bottom: 1px solid rgba(255, 255, 255, 0.12);"
             "padding: 16px 14px;"
             "font-weight: 700;"
             "}"
+            "QTableWidget#ProjectorScoreTable QTableCornerButton::section {"
+            "background-color: #22354f;"
+            "border: none;"
+            "border-bottom: 1px solid rgba(255, 255, 255, 0.12);"
+            "}"
         )
+        self.score_table.horizontalHeader().setMinimumHeight(56)
         self.score_table.verticalHeader().setVisible(False)
         self.score_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.score_table.setSelectionMode(QAbstractItemView.NoSelection)
@@ -401,7 +500,7 @@ class ProjectorWindow(QMainWindow):
         widget = QWidget()
         widget.setObjectName("ProjectorScreen")
         layout = QVBoxLayout(widget)
-        layout.setContentsMargins(56, 44, 56, 44)
+        layout.setContentsMargins(56, 40, 56, 40)
         layout.setSpacing(18)
 
         self.winners_logo = ScaledPixmapLabel(minimum_height=82)
@@ -420,46 +519,38 @@ class ProjectorWindow(QMainWindow):
         self.winners_music_status.setAlignment(Qt.AlignCenter)
         self.winners_music_status.hide()
 
-        winners_row = QWidget()
-        winners_row_layout = QHBoxLayout(winners_row)
-        winners_row_layout.setContentsMargins(0, 0, 0, 0)
-        winners_row_layout.setSpacing(16)
-
         self.winner_cards: list[QFrame] = []
         self.winner_place_labels: list[QLabel] = []
         self.winner_team_labels: list[QLabel] = []
         self.winner_score_labels: list[QLabel] = []
+        self.winner_cards = [None] * 5  # type: ignore[list-item]
+        self.winner_place_labels = [None] * 5  # type: ignore[list-item]
+        self.winner_team_labels = [None] * 5  # type: ignore[list-item]
+        self.winner_score_labels = [None] * 5  # type: ignore[list-item]
 
-        for place in range(1, 6):
-            card = QFrame()
-            card.setObjectName("ProjectorWinnerCard")
-            card.setProperty("champion", place == 1)
-            card_layout = QVBoxLayout(card)
-            card_layout.setContentsMargins(20, 22, 20, 22)
-            card_layout.setSpacing(8)
+        podium_row = QWidget()
+        podium_row.setAttribute(Qt.WA_StyledBackground, True)
+        podium_row.setStyleSheet("background: transparent;")
+        podium_row_layout = QHBoxLayout(podium_row)
+        podium_row_layout.setContentsMargins(0, 0, 0, 0)
+        podium_row_layout.setSpacing(20)
+        podium_row_layout.addStretch(1)
+        for place in (2, 1, 3):
+            slot = self._build_winner_slot(place)
+            podium_row_layout.addWidget(slot, 12 if place == 1 else 10)
+        podium_row_layout.addStretch(1)
 
-            place_label = QLabel(f"{place} место")
-            place_label.setObjectName("ProjectorWinnerPlace")
-            place_label.setAlignment(Qt.AlignCenter)
-
-            team_label = QLabel("Команда не определена")
-            team_label.setObjectName("ProjectorWinnerTeam")
-            team_label.setAlignment(Qt.AlignCenter)
-            team_label.setWordWrap(True)
-
-            score_label = QLabel("0 очков")
-            score_label.setObjectName("ProjectorWinnerScore")
-            score_label.setAlignment(Qt.AlignCenter)
-
-            card_layout.addWidget(place_label)
-            card_layout.addWidget(team_label)
-            card_layout.addWidget(score_label)
-
-            winners_row_layout.addWidget(card, 1)
-            self.winner_cards.append(card)
-            self.winner_place_labels.append(place_label)
-            self.winner_team_labels.append(team_label)
-            self.winner_score_labels.append(score_label)
+        trailing_row = QWidget()
+        trailing_row.setAttribute(Qt.WA_StyledBackground, True)
+        trailing_row.setStyleSheet("background: transparent;")
+        trailing_row_layout = QHBoxLayout(trailing_row)
+        trailing_row_layout.setContentsMargins(0, 0, 0, 0)
+        trailing_row_layout.setSpacing(20)
+        trailing_row_layout.addStretch(1)
+        for place in (4, 5):
+            slot = self._build_winner_slot(place)
+            trailing_row_layout.addWidget(slot, 9)
+        trailing_row_layout.addStretch(1)
 
         self.winners_footer = QLabel()
         self.winners_footer.setObjectName("ProjectorFooter")
@@ -471,15 +562,74 @@ class ProjectorWindow(QMainWindow):
         layout.addWidget(self.winners_subtitle)
         layout.addWidget(self.winners_music_status, alignment=Qt.AlignCenter)
         layout.addStretch(1)
-        layout.addWidget(winners_row)
+        layout.addWidget(podium_row)
+        layout.addWidget(trailing_row)
         layout.addStretch(1)
         layout.addWidget(self.winners_footer)
         return widget
 
+    def _build_winner_slot(self, place: int) -> QWidget:
+        wrapper = QWidget()
+        wrapper.setAttribute(Qt.WA_StyledBackground, True)
+        wrapper.setStyleSheet("background: transparent;")
+        wrapper_layout = QVBoxLayout(wrapper)
+        wrapper_layout.setContentsMargins(0, 0, 0, 0)
+        wrapper_layout.setSpacing(0)
+        wrapper_layout.addStretch(1)
+
+        card = QFrame()
+        card.setObjectName("ProjectorWinnerCard")
+        card.setProperty("champion", place == 1)
+        card.setProperty("placeRank", place)
+        card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+        if place == 1:
+            card.setMinimumHeight(300)
+            card.setMaximumWidth(430)
+        elif place in (2, 3):
+            card.setMinimumHeight(248)
+            card.setMaximumWidth(360)
+        else:
+            card.setMinimumHeight(200)
+            card.setMaximumWidth(320)
+
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(24, 24, 24, 24)
+        card_layout.setSpacing(10)
+
+        place_label = QLabel(f"{place} место")
+        place_label.setObjectName("ProjectorWinnerPlace")
+        place_label.setAlignment(Qt.AlignCenter)
+
+        team_label = QLabel("Команда не определена")
+        team_label.setObjectName("ProjectorWinnerTeam")
+        team_label.setAlignment(Qt.AlignCenter)
+        team_label.setWordWrap(True)
+
+        score_label = QLabel("0 очков")
+        score_label.setObjectName("ProjectorWinnerScore")
+        score_label.setAlignment(Qt.AlignCenter)
+
+        card_layout.addWidget(place_label)
+        card_layout.addStretch(1)
+        card_layout.addWidget(team_label)
+        card_layout.addWidget(score_label)
+        card_layout.addStretch(1)
+
+        wrapper_layout.addWidget(card, alignment=Qt.AlignHCenter | Qt.AlignBottom)
+
+        index = place - 1
+        self.winner_cards[index] = card
+        self.winner_place_labels[index] = place_label
+        self.winner_team_labels[index] = team_label
+        self.winner_score_labels[index] = score_label
+        return wrapper
+
     def apply_state(self, state: PresentationState) -> None:
+        self._active_scene = state.scene
         content_signature = self._make_content_signature(state)
-        animate_content = content_signature != self._last_content_signature
-        snapshot = self._capture_transition_snapshot() if animate_content else None
+        animate_content = False
+        snapshot = None
 
         self._stop_active_animations()
         self._reset_opacity_effects()
@@ -510,6 +660,8 @@ class ProjectorWindow(QMainWindow):
             self._apply_music_status(state.music_status)
             self._apply_rich_state(state)
             self.screen_stack.setCurrentWidget(self.rich_screen)
+            if hasattr(self, "rich_overlay"):
+                self.rich_overlay.raise_()
             if animate_content:
                 self._animate_rich_screen(state)
 
@@ -518,37 +670,205 @@ class ProjectorWindow(QMainWindow):
         self._last_content_signature = content_signature
 
     def _apply_rich_state(self, state: PresentationState) -> None:
+        is_round_scene = state.scene == "round"
+        is_question_scene = state.scene == "question"
+        is_answer_scene = state.scene == "answer"
+        has_highlighted_option_answer = (
+            state.scene == "answer"
+            and state.highlighted_option_index >= 0
+            and any(option.strip() for option in state.options)
+        )
+        self.rich_top_left.setText(state.top_left_text)
+        self.rich_top_right.setText(state.top_right_text)
+        self.rich_top_left.setVisible(bool(state.top_left_text))
+        self.rich_top_right.setVisible(bool(state.top_right_text))
         self.rich_title.setText(state.title)
         self.rich_subtitle.setText(state.subtitle)
         self.rich_body.setText(state.body)
         self.rich_footer.setText(state.footer)
         self.rich_badge.setText(state.badge)
-        self.rich_title.setVisible(bool(state.title))
-        self.rich_subtitle.setVisible(bool(state.subtitle))
-        self.rich_body.setVisible(bool(state.body))
-        self.rich_footer.setVisible(bool(state.footer))
+        self.rich_title.setVisible(False)
+        self.rich_subtitle.setVisible(False)
+        self.rich_body.setVisible(False)
+        self.rich_footer.setVisible(False)
         self.rich_badge.setVisible(bool(state.badge))
         self.answer_label.setText(state.answer_text)
-        self.answer_label.setVisible(bool(state.answer_text))
+        self.answer_label.setVisible(bool(state.answer_text) and not has_highlighted_option_answer)
+        self.rich_text_panel.setText(self._build_rich_text_html(state))
+        self.rich_text_panel.setVisible(
+            bool(state.title or state.subtitle or state.body or state.footer)
+        )
+        if is_round_scene:
+            self.rich_text_panel.setMinimumHeight(max(420, self.height() // 2))
+            self.rich_text_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        elif is_question_scene:
+            self.rich_text_panel.setMinimumHeight(max(300, self.height() // 3))
+            self.rich_text_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        else:
+            self.rich_text_panel.setMinimumHeight(0)
+            self.rich_text_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
         self._apply_logo(self.rich_logo, state.logo_path)
+        if is_question_scene or is_answer_scene:
+            self.rich_logo.hide()
         self._apply_background_media(state.background_path, state.background_type)
-        self._apply_foreground_media(state.media_path, state.media_type)
-        self._apply_options(state.options, state.highlighted_option_index)
+        if is_round_scene:
+            self.media_stack.setVisible(False)
+            self._stop_foreground_media()
+        else:
+            self._apply_foreground_media(state.media_path, state.media_type)
+        self._apply_options(state.options, state.option_media_paths, state.highlighted_option_index)
         self._apply_timer(state)
+        if is_question_scene:
+            self.rich_overlay_layout.setStretchFactor(self.media_stack, 0)
+            self.rich_overlay_layout.setStretchFactor(self.rich_text_panel, 1)
+            self.rich_overlay_layout.setStretchFactor(self.options_frame, 0)
+            self.media_stack.setMaximumHeight(max(260, self.height() // 2 - 60))
+        else:
+            self.rich_overlay_layout.setStretchFactor(self.media_stack, 1)
+            self.rich_overlay_layout.setStretchFactor(self.rich_text_panel, 0)
+            self.rich_overlay_layout.setStretchFactor(self.options_frame, 0)
+            self.media_stack.setMaximumHeight(16777215)
 
-    def _apply_options(self, options: list[str], highlighted_index: int) -> None:
-        has_options = any(option.strip() for option in options)
+    @staticmethod
+    def _build_rich_text_html(state: PresentationState) -> str:
+        if state.scene == "round":
+            parts: list[str] = ["<div style='text-align:center; max-width:1080px;'>"]
+            if state.title:
+                parts.append(
+                    f"<div style='font-size:118px;font-weight:900;color:#f8fafc;margin-bottom:22px;'>{escape(state.title)}</div>"
+                )
+            if state.subtitle:
+                parts.append(
+                    f"<div style='font-size:46px;font-weight:800;color:#d7e7ff;margin-bottom:34px;'>{escape(state.subtitle)}</div>"
+                )
+            if state.body:
+                body_html = "<br>".join(escape(line) for line in state.body.splitlines())
+                parts.append(
+                    f"<div style='font-size:62px;font-weight:700;color:#edf3ff;line-height:1.28;margin-bottom:36px;'>{body_html}</div>"
+                )
+            if state.footer:
+                parts.append(
+                    f"<div style='font-size:31px;font-weight:700;color:#bfd0ea;margin-top:18px;'>{escape(state.footer)}</div>"
+                )
+            parts.append("</div>")
+            return "".join(parts)
+
+        if state.scene == "question":
+            question_text = (state.body or state.title).strip()
+            if not question_text:
+                question_text = "Текст вопроса"
+            font_size = ProjectorWindow._question_font_size(
+                question_text,
+                has_media=bool(state.media_path),
+                has_options=bool(state.options),
+            )
+            return (
+                "<div style='text-align:center; max-width:1680px;'>"
+                f"<div style='font-size:{font_size}px;font-weight:800;color:#f8fafc;line-height:1.12;margin:0;'>{escape(question_text)}</div>"
+                "</div>"
+            )
+
+        parts: list[str] = []
+        if state.title:
+            parts.append(
+                f"<div style='font-size:88px;font-weight:900;color:#f8fafc;margin-bottom:18px;'>{escape(state.title)}</div>"
+            )
+        if state.subtitle:
+            parts.append(
+                f"<div style='font-size:40px;font-weight:800;color:#d7e7ff;margin-bottom:22px;'>{escape(state.subtitle)}</div>"
+            )
+        if state.body:
+            body_html = "<br>".join(escape(line) for line in state.body.splitlines())
+            parts.append(
+                f"<div style='font-size:54px;font-weight:700;color:#edf3ff;line-height:1.32;margin-bottom:24px;'>{body_html}</div>"
+            )
+        if state.footer:
+            parts.append(
+                f"<div style='font-size:31px;font-weight:700;color:#bfd0ea;margin-top:14px;'>{escape(state.footer)}</div>"
+            )
+        return "".join(parts)
+
+    @staticmethod
+    def _question_font_size(question_text: str, has_media: bool, has_options: bool) -> int:
+        text_length = len(question_text)
+        if has_options:
+            if text_length <= 55:
+                return 78
+            if text_length <= 100:
+                return 66
+            return 58
+        if has_media:
+            if text_length <= 55:
+                return 84
+            if text_length <= 110:
+                return 72
+            return 62
+        if text_length <= 40:
+            return 98
+        if text_length <= 80:
+            return 86
+        if text_length <= 120:
+            return 74
+        if text_length <= 170:
+            return 64
+        return 56
+
+    def _apply_options(
+        self,
+        options: list[str],
+        option_media_paths: list[str | None],
+        highlighted_index: int,
+    ) -> None:
+        is_answer_scene = getattr(self, "_active_scene", "") == "answer"
+        has_options = any(option.strip() for option in options) or any(
+            bool(path) for path in option_media_paths
+        )
         self.options_frame.setVisible(has_options)
         for index, label in enumerate(self.option_labels):
             label.setProperty("highlighted", index == highlighted_index)
-            self._refresh_style(label)
-            if index < len(options) and options[index].strip():
-                label.setText(options[index])
+            label.setProperty(
+                "answerCorrect",
+                bool(is_answer_scene and index == highlighted_index),
+            )
+            label.setProperty(
+                "answerMuted",
+                bool(is_answer_scene and highlighted_index >= 0 and index != highlighted_index),
+            )
+            effect = label.graphicsEffect()
+            if isinstance(effect, QGraphicsDropShadowEffect):
+                effect.setBlurRadius(0)
+                effect.setOffset(0, 0)
+                effect.setColor(QColor(0, 0, 0, 0))
+            option_text = options[index] if index < len(options) else ""
+            option_media_path = option_media_paths[index] if index < len(option_media_paths) else None
+            if option_media_path:
+                pixmap = QPixmap(option_media_path)
+                if not pixmap.isNull():
+                    label.setText("")
+                    label.setPixmap(
+                        pixmap.scaled(
+                            label.size() if label.width() > 0 and label.height() > 0 else QSize(320, 220),
+                            Qt.KeepAspectRatio,
+                            Qt.SmoothTransformation,
+                        )
+                    )
+                    label.show()
+                    self._refresh_style(label)
+                    continue
+            label.setPixmap(QPixmap())
+            if option_text.strip():
+                label.setText(option_text)
                 label.show()
             else:
                 label.clear()
                 label.hide()
+            self._refresh_style(label)
+
+        if is_answer_scene and 0 <= highlighted_index < len(self.option_labels):
+            highlighted_label = self.option_labels[highlighted_index]
+            if highlighted_label.isVisible():
+                self._animate_correct_option(highlighted_label)
 
     def _apply_logo(self, label: ScaledPixmapLabel, logo_path: str | None) -> None:
         if not logo_path:
@@ -599,12 +919,15 @@ class ProjectorWindow(QMainWindow):
         media_path: str | None,
         media_type: str | None,
     ) -> None:
+        is_clean_media_scene = getattr(self, "_active_scene", "") == "media"
         if not media_path or not media_type:
             self.media_placeholder.setText("Медиа для этого экрана не назначено.")
             self.media_stack.setCurrentWidget(self.media_placeholder)
+            self.media_stack.setVisible(False)
             self._stop_foreground_media()
             return
 
+        self.media_stack.setVisible(True)
         if media_type == "image":
             pixmap = QPixmap(media_path)
             if pixmap.isNull():
@@ -623,8 +946,9 @@ class ProjectorWindow(QMainWindow):
             return
 
         if media_type == "audio":
-            self.media_placeholder.setText("Сейчас воспроизводится аудиофайл.")
+            self.media_placeholder.setText("" if is_clean_media_scene else "Сейчас воспроизводится аудиофайл.")
             self.media_stack.setCurrentWidget(self.media_placeholder)
+            self.media_stack.setVisible(not is_clean_media_scene)
             self._play_foreground_audio(media_path)
             return
 
@@ -658,6 +982,10 @@ class ProjectorWindow(QMainWindow):
                 item = QTableWidgetItem(value)
                 if column_index == 1:
                     item.setForeground(QColor(row_color))
+                    team_font = item.font()
+                    team_font.setBold(True)
+                    team_font.setPointSize(18)
+                    item.setFont(team_font)
                 else:
                     item.setTextAlignment(Qt.AlignCenter)
                 if row_index < 3:
@@ -677,11 +1005,8 @@ class ProjectorWindow(QMainWindow):
             self.winner_place_labels[index].setText(f"{place} место")
             self.winner_team_labels[index].setText(team_name)
             self.winner_score_labels[index].setText(f"{score} очков")
-            self.winner_cards[index].setStyleSheet(
-                "border: 1px solid rgba(255,255,255,0.22);"
-                "border-radius: 28px;"
-                f"background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 rgba(15,23,42,0.74), stop:1 {self._to_rgba(color, 0.22)});"
-            )
+            self._apply_winner_card_style(self.winner_cards[index], place, color)
+            self._apply_winner_text_style(place, self.winner_place_labels[index], self.winner_team_labels[index], self.winner_score_labels[index])
 
     def _apply_music_status(self, status: str) -> None:
         for label in (
@@ -693,21 +1018,28 @@ class ProjectorWindow(QMainWindow):
             label.setVisible(bool(status))
 
     def _apply_timer(self, state: PresentationState) -> None:
-        has_timer = state.timer_total_seconds > 0 and state.scene in {
-            "question",
-            "answer",
-            "waiting",
-        }
-        self.rich_timer_frame.setVisible(has_timer)
-        if not has_timer:
+        show_large_timer = state.timer_total_seconds > 0 and state.scene == "waiting"
+        show_question_timer = state.timer_total_seconds > 0 and state.scene == "question"
+        self.rich_timer_frame.setVisible(show_large_timer)
+        self.question_timer_frame.setVisible(show_question_timer)
+        self.rich_timer_circle.setVisible(show_large_timer)
+
+        if not (show_large_timer or show_question_timer):
             self.rich_timer_source.clear()
             self.rich_timer_value.setText("00:00")
             self.rich_timer_progress.setValue(0)
+            self.question_timer_source.clear()
+            self.question_timer_value.setText("00:00")
+            self.question_timer_progress.setValue(0)
             self.rich_timer_circle.set_progress_state(0.0, False)
             self.rich_timer_frame.setProperty("finished", False)
             self.rich_timer_value.setProperty("finished", False)
+            self.question_timer_frame.setProperty("finished", False)
+            self.question_timer_value.setProperty("finished", False)
             self._refresh_style(self.rich_timer_frame)
             self._refresh_style(self.rich_timer_value)
+            self._refresh_style(self.question_timer_frame)
+            self._refresh_style(self.question_timer_value)
             return
 
         remaining_seconds = max(state.timer_remaining_seconds, 0)
@@ -718,13 +1050,20 @@ class ProjectorWindow(QMainWindow):
 
         self.rich_timer_frame.setProperty("finished", finished)
         self.rich_timer_value.setProperty("finished", finished)
+        self.question_timer_frame.setProperty("finished", finished)
+        self.question_timer_value.setProperty("finished", finished)
         self._refresh_style(self.rich_timer_frame)
         self._refresh_style(self.rich_timer_value)
+        self._refresh_style(self.question_timer_frame)
+        self._refresh_style(self.question_timer_value)
 
         self.rich_timer_source.setText(f"{state.timer_source or 'Таймер'} · {timer_status}")
         self.rich_timer_value.setText(self._format_time(remaining_seconds))
+        self.question_timer_source.setText(state.timer_source or "Таймер вопроса")
+        self.question_timer_value.setText(self._format_time(remaining_seconds))
         self.rich_timer_circle.set_progress_state(progress_fraction, finished)
         self._animate_timer_bar(progress_value)
+        self._animate_question_timer_bar(progress_value)
 
     @staticmethod
     def _format_time(seconds: int) -> str:
@@ -742,8 +1081,75 @@ class ProjectorWindow(QMainWindow):
         self._timer_bar_animation.setEndValue(target_value)
         self._timer_bar_animation.start()
 
+    def _animate_question_timer_bar(self, target_value: int) -> None:
+        if self._question_timer_bar_animation.targetObject() is not self.question_timer_progress:
+            self._question_timer_bar_animation = QPropertyAnimation(self.question_timer_progress, b"value", self)
+            self._question_timer_bar_animation.setDuration(420)
+            self._question_timer_bar_animation.setEasingCurve(QEasingCurve.OutCubic)
+        else:
+            self._question_timer_bar_animation.stop()
+        self._question_timer_bar_animation.setStartValue(self.question_timer_progress.value())
+        self._question_timer_bar_animation.setEndValue(target_value)
+        self._question_timer_bar_animation.start()
+
+    def _animate_correct_option(self, label: QLabel) -> None:
+        effect = label.graphicsEffect()
+        if not isinstance(effect, QGraphicsDropShadowEffect):
+            effect = QGraphicsDropShadowEffect(label)
+            effect.setOffset(0, 0)
+            label.setGraphicsEffect(effect)
+        effect.setColor(QColor(45, 212, 191, 220))
+        effect.setBlurRadius(14)
+
+        final_geometry = label.geometry()
+        if final_geometry.width() <= 0 or final_geometry.height() <= 0:
+            return
+        pulse_geometry = final_geometry.adjusted(-10, -8, 10, 8)
+
+        blur_out = QPropertyAnimation(effect, b"blurRadius", self)
+        blur_out.setDuration(220)
+        blur_out.setStartValue(14)
+        blur_out.setEndValue(44)
+        blur_out.setEasingCurve(QEasingCurve.OutCubic)
+
+        blur_in = QPropertyAnimation(effect, b"blurRadius", self)
+        blur_in.setDuration(260)
+        blur_in.setStartValue(44)
+        blur_in.setEndValue(24)
+        blur_in.setEasingCurve(QEasingCurve.InOutCubic)
+
+        geometry_out = QPropertyAnimation(label, b"geometry", self)
+        geometry_out.setDuration(220)
+        geometry_out.setStartValue(final_geometry)
+        geometry_out.setEndValue(pulse_geometry)
+        geometry_out.setEasingCurve(QEasingCurve.OutCubic)
+
+        geometry_in = QPropertyAnimation(label, b"geometry", self)
+        geometry_in.setDuration(260)
+        geometry_in.setStartValue(pulse_geometry)
+        geometry_in.setEndValue(final_geometry)
+        geometry_in.setEasingCurve(QEasingCurve.InOutCubic)
+
+        blur_sequence = QSequentialAnimationGroup(self)
+        blur_sequence.addAnimation(blur_out)
+        blur_sequence.addAnimation(blur_in)
+
+        geometry_sequence = QSequentialAnimationGroup(self)
+        geometry_sequence.addAnimation(geometry_out)
+        geometry_sequence.addAnimation(geometry_in)
+
+        group = QParallelAnimationGroup(self)
+        group.addAnimation(blur_sequence)
+        group.addAnimation(geometry_sequence)
+        group.finished.connect(lambda w=label, rect=final_geometry: w.setGeometry(rect))
+        group.finished.connect(lambda animation=group: self._release_animation(animation))
+        self._keep_animation(group)
+        group.start()
+
     def _animate_rich_screen(self, state: PresentationState) -> None:
         widgets: list[QWidget] = [
+            self.rich_top_left,
+            self.rich_top_right,
             self.rich_logo,
             self.rich_title,
             self.rich_subtitle,
@@ -988,6 +1394,69 @@ class ProjectorWindow(QMainWindow):
         qcolor = QColor(color)
         qcolor.setAlphaF(alpha)
         return qcolor.name(QColor.HexArgb)
+
+    def _apply_winner_card_style(self, card: QFrame, place: int, color: str) -> None:
+        accent = {
+            1: "#facc15",
+            2: "#dbe4f0",
+            3: "#d39b67",
+            4: "#8ad5c4",
+            5: "#8ad5c4",
+        }.get(place, color)
+        border = {
+            1: "rgba(254, 240, 138, 0.92)",
+            2: "rgba(226, 232, 240, 0.72)",
+            3: "rgba(251, 191, 153, 0.72)",
+            4: "rgba(153, 246, 228, 0.48)",
+            5: "rgba(153, 246, 228, 0.48)",
+        }.get(place, "rgba(255,255,255,0.22)")
+        background_start = {
+            1: "rgba(55, 37, 6, 0.86)",
+            2: "rgba(25, 35, 52, 0.84)",
+            3: "rgba(56, 31, 17, 0.84)",
+            4: "rgba(13, 36, 42, 0.78)",
+            5: "rgba(13, 36, 42, 0.78)",
+        }.get(place, "rgba(15,23,42,0.74)")
+        end_color = self._to_rgba(accent or color, 0.28 if place == 1 else 0.2)
+        card.setStyleSheet(
+            "QFrame#ProjectorWinnerCard {"
+            f"border: {2 if place == 1 else 1}px solid {border};"
+            "border-radius: 30px;"
+            f"background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 {background_start}, stop:1 {end_color});"
+            "}"
+        )
+
+    @staticmethod
+    def _apply_winner_text_style(place: int, place_label: QLabel, team_label: QLabel, score_label: QLabel) -> None:
+        place_font = place_label.font()
+        team_font = team_label.font()
+        score_font = score_label.font()
+
+        if place == 1:
+            place_font.setPointSize(24)
+            place_font.setBold(True)
+            team_font.setPointSize(34)
+            team_font.setBold(True)
+            score_font.setPointSize(24)
+            score_font.setBold(True)
+        elif place in (2, 3):
+            place_font.setPointSize(20)
+            place_font.setBold(True)
+            team_font.setPointSize(28)
+            team_font.setBold(True)
+            score_font.setPointSize(20)
+            score_font.setBold(True)
+        else:
+            place_font.setPointSize(17)
+            place_font.setBold(True)
+            team_font.setPointSize(23)
+            team_font.setBold(True)
+            score_font.setPointSize(17)
+            score_font.setBold(True)
+
+        place_label.setFont(place_font)
+        team_label.setFont(team_font)
+        score_label.setFont(score_font)
 
     def _ensure_background_video_widget(self) -> QVideoWidget:
         if self.background_video_widget is None:

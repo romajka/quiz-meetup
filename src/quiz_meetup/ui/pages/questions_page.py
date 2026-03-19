@@ -97,10 +97,10 @@ class QuestionsPage(QWidget):
         self.option_b_input = QLineEdit()
         self.option_c_input = QLineEdit()
         self.option_d_input = QLineEdit()
-        self.option_a_input.setPlaceholderText("Вариант A")
-        self.option_b_input.setPlaceholderText("Вариант B")
-        self.option_c_input.setPlaceholderText("Вариант C")
-        self.option_d_input.setPlaceholderText("Вариант D")
+        self.option_a_input.setPlaceholderText("Вариант A или пусто для картинки")
+        self.option_b_input.setPlaceholderText("Вариант B или пусто для картинки")
+        self.option_c_input.setPlaceholderText("Вариант C или пусто для картинки")
+        self.option_d_input.setPlaceholderText("Вариант D или пусто для картинки")
         options_layout.addRow("A", self.option_a_input)
         options_layout.addRow("B", self.option_b_input)
         options_layout.addRow("C", self.option_c_input)
@@ -118,9 +118,9 @@ class QuestionsPage(QWidget):
 
         self.new_question_button = QPushButton("Новый вопрос")
         self.new_question_button.setObjectName("SecondaryButton")
-        self.move_up_button = QPushButton("Выше")
+        self.move_up_button = QPushButton("Поднять выше")
         self.move_up_button.setObjectName("SecondaryButton")
-        self.move_down_button = QPushButton("Ниже")
+        self.move_down_button = QPushButton("Опустить ниже")
         self.move_down_button.setObjectName("SecondaryButton")
         self.save_question_button = QPushButton("Создать вопрос")
         self.save_question_button.setObjectName("AccentButton")
@@ -128,12 +128,12 @@ class QuestionsPage(QWidget):
         self.delete_question_button.setObjectName("DangerButton")
 
         self.question_media_label = QLabel(
-            "Медиа вопроса пока не прикреплено. Можно добавить изображение, видео или аудио."
+            "Медиа вопроса пока не прикреплено. Можно добавить базовый файл здесь, а расширенные роли и ABCD-картинки задать на странице медиабиблиотеки."
         )
         self.question_media_label.setObjectName("DetailsLabel")
         self.question_media_label.setWordWrap(True)
         self.answer_media_label = QLabel(
-            "Медиа ответа пока не прикреплено. Можно добавить изображение, видео или аудио."
+            "Медиа ответа пока не прикреплено. Можно добавить базовый файл здесь, а расширенные роли и ABCD-картинки задать на странице медиабиблиотеки."
         )
         self.answer_media_label.setObjectName("DetailsLabel")
         self.answer_media_label.setWordWrap(True)
@@ -155,6 +155,9 @@ class QuestionsPage(QWidget):
         self.details_label = QLabel("Сначала выберите раунд и вопрос.")
         self.details_label.setWordWrap(True)
         self.details_label.setObjectName("DetailsLabel")
+        self.order_hint_label = QLabel("Порядок вопросов меняется кнопками сверху. Список идёт сверху вниз.")
+        self.order_hint_label.setWordWrap(True)
+        self.order_hint_label.setObjectName("PageHint")
 
         for button in (
             self.new_question_button,
@@ -198,6 +201,7 @@ class QuestionsPage(QWidget):
         list_actions_layout.addWidget(self.move_up_button)
         list_actions_layout.addWidget(self.move_down_button)
         left_layout.addLayout(list_actions_layout)
+        left_layout.addWidget(self.order_hint_label)
         left_layout.addWidget(self.questions_list, 1)
         self.questions_list.setMinimumHeight(420)
 

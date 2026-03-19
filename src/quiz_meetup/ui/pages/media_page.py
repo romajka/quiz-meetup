@@ -570,14 +570,26 @@ class MediaPage(QWidget):
         combo = QComboBox()
         role_order = [
             "library",
+            "rules",
             "game_splash",
             "game_logo",
             "waiting_background",
-            "round",
-            "question",
-            "answer",
+            "pause",
             "sponsor",
             "background_music",
+            "round",
+            "question",
+            "question_image",
+            "question_video",
+            "question_audio",
+            "answer",
+            "answer_image",
+            "answer_video",
+            "answer_audio",
+            "option_a_image",
+            "option_b_image",
+            "option_c_image",
+            "option_d_image",
         ]
         for role in role_order:
             combo.addItem(self.media_service.role_label(role), role)
@@ -591,7 +603,7 @@ class MediaPage(QWidget):
     ) -> None:
         role = str(role_combo.currentData())
         show_round = role == "round"
-        show_question = role in {"question", "answer"}
+        show_question = self.media_service.is_question_bound_role(role)
 
         round_combo.setVisible(show_round)
         question_combo.setVisible(show_question)
@@ -613,9 +625,11 @@ class MediaPage(QWidget):
         if media.usage_role == "library":
             return "Без привязки"
         if media.usage_role in {
+            "rules",
             "game_splash",
             "game_logo",
             "waiting_background",
+            "pause",
             "sponsor",
             "background_music",
         }:
@@ -623,14 +637,28 @@ class MediaPage(QWidget):
         if media.usage_role == "round":
             round_item = next((item for item in self.cached_rounds if item.id == media.round_id), None)
             return round_item.title if round_item is not None else "Раунд не найден"
-        if media.usage_role in {"question", "answer"}:
+        if self.media_service.is_question_bound_role(media.usage_role):
             question = next(
                 (item for item in self.cached_questions if item.id == media.question_id),
                 None,
             )
             if question is None:
                 return "Вопрос не найден"
-            return self._question_label(question)
+            suffix = {
+                "question": "Основной блок вопроса",
+                "question_image": "Картинка вопроса",
+                "question_video": "Видео вопроса",
+                "question_audio": "Аудио вопроса",
+                "answer": "Основной блок ответа",
+                "answer_image": "Картинка ответа",
+                "answer_video": "Видео ответа",
+                "answer_audio": "Аудио ответа",
+                "option_a_image": "Картинка варианта A",
+                "option_b_image": "Картинка варианта B",
+                "option_c_image": "Картинка варианта C",
+                "option_d_image": "Картинка варианта D",
+            }.get(media.usage_role, self.media_service.role_label(media.usage_role))
+            return f"{self._question_label(question)} / {suffix}"
         return "Без привязки"
 
     def _question_label(self, question: Question) -> str:

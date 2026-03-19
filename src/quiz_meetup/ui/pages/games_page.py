@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSpinBox,
     QSplitter,
     QStackedWidget,
@@ -307,10 +308,10 @@ class GamesPage(QWidget):
         self.option_b_input = QLineEdit()
         self.option_c_input = QLineEdit()
         self.option_d_input = QLineEdit()
-        self.option_a_input.setPlaceholderText("Вариант A")
-        self.option_b_input.setPlaceholderText("Вариант B")
-        self.option_c_input.setPlaceholderText("Вариант C")
-        self.option_d_input.setPlaceholderText("Вариант D")
+        self.option_a_input.setPlaceholderText("Вариант A или пусто для картинки")
+        self.option_b_input.setPlaceholderText("Вариант B или пусто для картинки")
+        self.option_c_input.setPlaceholderText("Вариант C или пусто для картинки")
+        self.option_d_input.setPlaceholderText("Вариант D или пусто для картинки")
         options_layout.addRow("A", self.option_a_input)
         options_layout.addRow("B", self.option_b_input)
         options_layout.addRow("C", self.option_c_input)
@@ -333,7 +334,7 @@ class GamesPage(QWidget):
         self.question_hint_label.setObjectName("PageHint")
         self.question_hint_label.setWordWrap(True)
         self.question_media_info_label = QLabel(
-            "Медиа вопроса пока не прикреплено. Можно добавить изображение, видео или аудио."
+            "Медиа вопроса пока не прикреплено. Можно добавить базовый файл здесь, а расширенные роли и ABCD-картинки задать на странице «Медиа»."
         )
         self.question_media_info_label.setObjectName("DetailsLabel")
         self.question_media_info_label.setWordWrap(True)
@@ -344,7 +345,7 @@ class GamesPage(QWidget):
         self.remove_question_media_button = QPushButton("Удалить файл вопроса")
         self.remove_question_media_button.setObjectName("DangerButton")
         self.answer_media_info_label = QLabel(
-            "Медиа ответа пока не прикреплено. Можно добавить изображение, видео или аудио."
+            "Медиа ответа пока не прикреплено. Можно добавить базовый файл здесь, а расширенные роли и ABCD-картинки задать на странице «Медиа»."
         )
         self.answer_media_info_label.setObjectName("DetailsLabel")
         self.answer_media_info_label.setWordWrap(True)
@@ -470,13 +471,13 @@ class GamesPage(QWidget):
         title.setObjectName("PageTitle")
         hero_text_layout.addWidget(title)
         hero_text_layout.addWidget(self.catalog_hint_label)
-        hero_text_layout.addWidget(
-            QLabel(
-                "Здесь хранятся шаблоны игр. Сначала соберите игру: "
-                "раунды, вопросы и общие медиа. Затем запускайте новую "
-                "игровую сессию или продолжайте уже начатую."
-            )
+        hero_details_label = QLabel(
+            "Здесь хранятся шаблоны игр. Сначала соберите игру: "
+            "раунды, вопросы и общие медиа. Затем запускайте новую "
+            "игровую сессию или продолжайте уже начатую."
         )
+        hero_details_label.setWordWrap(True)
+        hero_text_layout.addWidget(hero_details_label)
 
         hero_actions_layout = QVBoxLayout()
         hero_actions_layout.setSpacing(10)
@@ -502,7 +503,11 @@ class GamesPage(QWidget):
         title = QLabel("Список игр")
         title.setObjectName("SectionCaption")
         layout.addWidget(title)
-        layout.addWidget(QLabel("Откройте игру для редактирования, запустите новую игровую сессию или продолжите текущую."))
+        catalog_details_label = QLabel(
+            "Откройте игру для редактирования, запустите новую игровую сессию или продолжите текущую."
+        )
+        catalog_details_label.setWordWrap(True)
+        layout.addWidget(catalog_details_label)
         layout.addWidget(self.games_list, 1)
         return card
 
@@ -1002,16 +1007,19 @@ class GamesPage(QWidget):
                 round_item = self.round_service.create_round(
                     game_id=self.current_game_id,
                     title=self.round_title_input.text(),
+                    round_type="standard",
                     order_index=None,
                     timer_seconds=DEFAULT_ROUND_TIMER_SECONDS,
+                    settings_text="",
                     notes=self.round_notes_input.toPlainText(),
                 )
             else:
-                current_round = self.get_selected_round()
                 round_item = self.round_service.update_round(
                     round_id=self.current_round_id,
                     title=self.round_title_input.text(),
-                    timer_seconds=current_round.timer_seconds if current_round is not None else DEFAULT_ROUND_TIMER_SECONDS,
+                    round_type="standard",
+                    timer_seconds=DEFAULT_ROUND_TIMER_SECONDS,
+                    settings_text="",
                     notes=self.round_notes_input.toPlainText(),
                 )
         except ValueError as error:
@@ -1200,9 +1208,10 @@ class GamesPage(QWidget):
         for game in filtered_games:
             item = QListWidgetItem()
             item.setData(Qt.UserRole, game.id)
-            item.setSizeHint(QSize(0, 112))
+            card_widget = self._build_game_card(game)
+            item.setSizeHint(card_widget.sizeHint())
             self.games_list.addItem(item)
-            self.games_list.setItemWidget(item, self._build_game_card(game))
+            self.games_list.setItemWidget(item, card_widget)
         self.games_list.blockSignals(False)
 
         if self.games_list.count() == 0:
@@ -1302,7 +1311,7 @@ class GamesPage(QWidget):
             question_count = len(self.question_service.list_questions_by_round(round_item.id))
             item = QListWidgetItem()
             item.setData(Qt.UserRole, round_item.id)
-            item.setSizeHint(QSize(0, 60))
+            item.setSizeHint(QSize(0, 82))
             self.rounds_list.addItem(item)
             self.rounds_list.setItemWidget(
                 item,
@@ -1381,7 +1390,7 @@ class GamesPage(QWidget):
         for question in questions:
             item = QListWidgetItem()
             item.setData(Qt.UserRole, question.id)
-            item.setSizeHint(QSize(0, 72))
+            item.setSizeHint(QSize(0, 94))
             self.questions_list.addItem(item)
             self.questions_list.setItemWidget(
                 item,
@@ -1549,13 +1558,16 @@ class GamesPage(QWidget):
         card.setObjectName("GameListCard")
         card.setProperty("selected", game.id == self.current_game_id)
 
-        layout = QHBoxLayout(card)
+        layout = QVBoxLayout(card)
         layout.setContentsMargins(20, 18, 20, 18)
-        layout.setSpacing(16)
+        layout.setSpacing(14)
+
+        top_row_layout = QHBoxLayout()
+        top_row_layout.setSpacing(14)
 
         badge = QLabel()
         badge.setObjectName("GameCardBadge")
-        badge.setFixedSize(58, 58)
+        badge.setFixedSize(54, 54)
         badge_icon = interface_icon("Command", color="#ffffff", size=28)
         badge.setPixmap(badge_icon.pixmap(28, 28))
         badge.setAlignment(Qt.AlignCenter)
@@ -1591,31 +1603,34 @@ class GamesPage(QWidget):
             history_label.setWordWrap(True)
             info_layout.addWidget(history_label)
 
-        layout.addWidget(badge)
-        layout.addLayout(info_layout, 1)
-
-        actions_layout = QHBoxLayout()
-        actions_layout.setSpacing(10)
+        top_row_layout.addWidget(badge, 0, Qt.AlignTop)
+        top_row_layout.addLayout(info_layout, 1)
+        layout.addLayout(top_row_layout)
 
         open_button = QPushButton("Открыть")
         open_button.setObjectName("CardPrimaryButton")
         open_button.setMinimumHeight(48)
+        open_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         apply_button_icon(open_button, "Book_Open", color="#ffffff")
         open_button.clicked.connect(
             lambda _checked=False, game_id=game.id: self._open_game_from_catalog(game_id)
         )
 
-        start_button = QPushButton("Запустить новую игру")
+        start_button = QPushButton("Новый запуск")
         start_button.setObjectName("CardStartButton")
         start_button.setMinimumHeight(48)
+        start_button.setToolTip("Запустить новую игру")
+        start_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         apply_button_icon(start_button, "External_Link", color="#ffffff")
         start_button.clicked.connect(
             lambda _checked=False, game_id=game.id: self._start_new_session_from_catalog(game_id)
         )
 
-        continue_button = QPushButton("Продолжить игру")
+        continue_button = QPushButton("Продолжить")
         continue_button.setObjectName("CardPrimaryButton")
         continue_button.setMinimumHeight(48)
+        continue_button.setToolTip("Продолжить игру")
+        continue_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         apply_button_icon(continue_button, "Link", color="#ffffff")
         continue_button.setEnabled(active_session is not None)
         continue_button.clicked.connect(
@@ -1625,6 +1640,7 @@ class GamesPage(QWidget):
         copy_button = QPushButton()
         copy_button.setObjectName("CardIconButton")
         copy_button.setFixedSize(48, 48)
+        copy_button.setToolTip("Создать копию")
         apply_button_icon(copy_button, "Check_All_Big", color="#2f3542")
         copy_button.clicked.connect(
             lambda _checked=False, game_id=game.id: self._duplicate_game_from_catalog(game_id)
@@ -1633,17 +1649,25 @@ class GamesPage(QWidget):
         delete_button = QPushButton()
         delete_button.setObjectName("CardDeleteButton")
         delete_button.setFixedSize(48, 48)
+        delete_button.setToolTip("Удалить игру")
         apply_button_icon(delete_button, "Trash_Full", color="#dc2626")
         delete_button.clicked.connect(
             lambda _checked=False, game_id=game.id: self._delete_game_from_catalog(game_id)
         )
 
-        actions_layout.addWidget(open_button)
-        actions_layout.addWidget(continue_button)
-        actions_layout.addWidget(start_button)
-        actions_layout.addWidget(copy_button)
-        actions_layout.addWidget(delete_button)
-        layout.addLayout(actions_layout)
+        actions_row_one = QHBoxLayout()
+        actions_row_one.setSpacing(10)
+        actions_row_one.addWidget(open_button)
+        actions_row_one.addWidget(continue_button)
+
+        actions_row_two = QHBoxLayout()
+        actions_row_two.setSpacing(10)
+        actions_row_two.addWidget(start_button, 1)
+        actions_row_two.addWidget(copy_button)
+        actions_row_two.addWidget(delete_button)
+
+        layout.addLayout(actions_row_one)
+        layout.addLayout(actions_row_two)
         return card
 
     def _select_game_by_id(self, game_id: int) -> None:
@@ -1744,6 +1768,16 @@ class GamesPage(QWidget):
 
     @staticmethod
     def _game_media_button_text(media) -> str:
+        role_label = {
+            "game_splash": "Заставка",
+            "rules": "Правила",
+            "waiting_background": "Ожидание",
+            "pause": "Пауза",
+            "sponsor": "Партнёры",
+            "background_music": "Музыка",
+        }.get(media.usage_role)
+        if role_label:
+            return f"{role_label}: {media.title}"
         return media.title
 
     def _open_local_media_preview(self, file_path: str) -> None:
@@ -1862,15 +1896,17 @@ class GamesPage(QWidget):
         card.setProperty("selected", False)
 
         layout = QHBoxLayout(card)
-        layout.setContentsMargins(12, 8, 12, 8)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(8)
 
         text_layout = QVBoxLayout()
-        text_layout.setSpacing(2)
+        text_layout.setSpacing(4)
         title = QLabel(f"{round_item.order_index}. {round_item.title}")
         title.setObjectName("CompactListTitle")
+        title.setWordWrap(True)
         meta = QLabel(f"Вопросов: {question_count}")
         meta.setObjectName("CompactListMeta")
+        meta.setWordWrap(True)
         text_layout.addWidget(title)
         text_layout.addWidget(meta)
 
@@ -1905,17 +1941,19 @@ class GamesPage(QWidget):
         card.setProperty("selected", False)
 
         layout = QHBoxLayout(card)
-        layout.setContentsMargins(12, 8, 12, 8)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(8)
 
         text_layout = QVBoxLayout()
-        text_layout.setSpacing(2)
+        text_layout.setSpacing(4)
         title = QLabel(f"{question.order_index}. {question.title}")
         title.setObjectName("CompactListTitle")
+        title.setWordWrap(True)
         meta = QLabel(
             f"{self._question_preview(question.prompt)} · {question.points} очк. · {self._question_timer_label(question.timer_seconds)}"
         )
         meta.setObjectName("CompactListMeta")
+        meta.setWordWrap(True)
         text_layout.addWidget(title)
         text_layout.addWidget(meta)
 
@@ -2037,7 +2075,9 @@ class GamesPage(QWidget):
             round_item = self.round_service.update_round(
                 round_id=self.current_round_id,
                 title=self.round_title_input.text(),
+                round_type="standard",
                 timer_seconds=DEFAULT_ROUND_TIMER_SECONDS,
+                settings_text="",
                 notes=self.round_notes_input.toPlainText(),
             )
         except ValueError:

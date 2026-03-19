@@ -52,6 +52,11 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("Quiz Meetup")
         self.setWindowIcon(interface_icon("Command", color="#10213a", size=24))
+        self.setWindowFlag(Qt.Window, True)
+        self.setWindowFlag(Qt.WindowMinimizeButtonHint, True)
+        self.setWindowFlag(Qt.WindowMaximizeButtonHint, True)
+        self.setWindowFlag(Qt.WindowCloseButtonHint, True)
+        self.setMinimumSize(920, 640)
         self.resize(1600, 960)
 
         self.games_page = GamesPage(
@@ -150,7 +155,7 @@ class MainWindow(QMainWindow):
 
         sidebar = QFrame()
         sidebar.setObjectName("SidebarCard")
-        sidebar.setFixedWidth(240)
+        sidebar.setFixedWidth(220)
         sidebar_layout = QVBoxLayout(sidebar)
         sidebar_layout.setContentsMargins(16, 16, 16, 16)
         sidebar_layout.setSpacing(10)
@@ -434,6 +439,7 @@ class MainWindow(QMainWindow):
         self.running_session_id = session.id
         self.completed_round_ids = set()
         self._apply_live_session_context(game.id, session.id)
+        self._update_session_live_state(display_phase="waiting", round_id=None, question_id=None)
         rounds = self.services.round_service.list_rounds_by_game(game.id)
         if rounds and self.games_page.get_selected_round() is None and hasattr(self.games_page, "_select_round"):
             self.games_page._select_round(rounds[0].id)
@@ -455,11 +461,10 @@ class MainWindow(QMainWindow):
         self.running_session_id = session.id
         self.completed_round_ids = self.services.game_session_service.get_completed_round_ids(session.id)
         self._apply_live_session_context(game.id, session.id)
-        rounds = self.services.round_service.list_rounds_by_game(game.id)
-        if rounds and self.games_page.get_selected_round() is None and hasattr(self.games_page, "_select_round"):
-            self.games_page._select_round(rounds[0].id)
+        self._restore_live_session_state(session)
         self.set_section(6)
         self.refresh_context_panels()
+        self._resume_session_presentation(session)
 
     def open_media_page_for_current_game(self) -> None:
         game = self.games_page.get_selected_game()
@@ -487,12 +492,21 @@ class MainWindow(QMainWindow):
 
         if self.projector_window is None:
             self.projector_window = ProjectorWindow(self.services.presentation_service)
-
-        self.projector_window.show()
-        if full_screen:
-            self.projector_window.showFullScreen()
-        else:
+        elif self.projector_window.isMinimized():
             self.projector_window.showNormal()
+
+        if full_screen:
+            if not self.projector_window.isFullScreen():
+                self.projector_window.showFullScreen()
+        else:
+            # Preserve the user-selected projector size in normal window mode.
+            if self.projector_window.isFullScreen():
+                self.projector_window.showNormal()
+            elif not self.projector_window.isVisible():
+                self.projector_window.show()
+
+        if not self.projector_window.isVisible():
+            self.projector_window.show()
         self.projector_window.raise_()
         self.raise_()
         self.activateWindow()
@@ -510,6 +524,7 @@ class MainWindow(QMainWindow):
                 logo=self._get_game_logo(game.id),
                 background=self._get_game_splash_media(game.id),
             )
+        self._update_session_live_state(display_phase="welcome", round_id=None, question_id=None)
 
         if open_window:
             self.open_projector_window()
@@ -528,6 +543,11 @@ class MainWindow(QMainWindow):
             game=game,
             logo=self._get_game_logo(game.id),
             background=waiting_background,
+        )
+        self._update_session_live_state(
+            display_phase="waiting",
+            round_id=self._resolve_active_round().id if self._resolve_active_round() is not None else None,
+            question_id=self._resolve_active_question().id if self._resolve_active_question() is not None else None,
         )
         self.open_projector_window()
 
@@ -554,6 +574,7 @@ class MainWindow(QMainWindow):
             partner_media=self._get_partner_media(game.id),
             logo=self._get_game_logo(game.id),
         )
+        self._update_session_live_state(display_phase="sponsor", round_id=None, question_id=None)
         self.open_projector_window()
 
     def show_selected_round(self) -> None:
@@ -571,8 +592,16 @@ class MainWindow(QMainWindow):
             game_title=game_title,
             logo=self._get_game_logo(game_id),
             round_media=self._get_round_media(game_id, round_item.id),
-            footer_text="Раунд игры",
+            footer_text=(
+                f"{self._round_type_label(round_item.round_type)}"
+                + (
+                    f" · Таймер по умолчанию: {round_item.timer_seconds} сек"
+                    if round_item.timer_seconds > 0
+                    else " · Без таймера"
+                )
+            ),
         )
+        self._update_session_live_state(display_phase="round", round_id=round_item.id, question_id=None)
         self.open_projector_window()
 
     def show_selected_question(self) -> None:
@@ -581,23 +610,33 @@ class MainWindow(QMainWindow):
             self._show_warning("Сначала выберите вопрос.")
             return
 
+        self._present_question(question)
+
+    def _present_question(self, question) -> None:
         round_item = self.services.round_service.get_round(question.round_id)
         round_title = round_item.title if round_item else "Без раунда"
+        round_questions = self.services.question_service.list_questions_by_round(question.round_id)
         game = self._resolve_active_game()
+        if game is None and round_item is not None:
+            game = self.services.game_service.get_game(round_item.game_id)
         game_id = game.id if game is not None else (round_item.game_id if round_item is not None else 0)
-        resolved_timer_seconds, timer_source = self._resolve_question_timer(question)
+        resolved_timer_seconds, _timer_source = self._resolve_question_timer(question)
         self._prepare_question_timer(question)
         self.services.presentation_service.show_question(
             question=question,
             round_title=round_title,
             options=self._build_question_options(question),
-            logo=self._get_game_logo(game_id) if game_id else None,
-            question_media=self._get_question_media(game_id, question.id) if game_id else None,
-            footer_text=(
-                f"Очки: {question.points} | Таймер: {resolved_timer_seconds} сек"
-                if resolved_timer_seconds > 0
-                else f"Очки: {question.points} | Без таймера"
-            ),
+            option_media_paths=self._build_option_media_paths(game_id, question.id) if game_id else [],
+            logo=None,
+            question_media=self._get_primary_question_stage_media(game_id, question.id, "question") if game_id else None,
+            footer_text="",
+            top_left_text=self._build_question_counter_text(question, round_questions),
+            top_right_text=f"Очки: {question.points}",
+        )
+        self._update_session_live_state(
+            display_phase="question",
+            round_id=round_item.id if round_item is not None else None,
+            question_id=question.id,
         )
         self.open_projector_window()
 
@@ -610,22 +649,36 @@ class MainWindow(QMainWindow):
             self._show_warning("Сначала выберите вопрос.")
             return
 
+        self._present_answer(question)
+
+    def _present_answer(self, question) -> None:
         round_item = self.services.round_service.get_round(question.round_id)
         round_title = round_item.title if round_item else "Без раунда"
+        round_questions = self.services.question_service.list_questions_by_round(question.round_id)
         game = self._resolve_active_game()
+        if game is None and round_item is not None:
+            game = self.services.game_service.get_game(round_item.game_id)
         game_id = game.id if game is not None else (round_item.game_id if round_item is not None else 0)
-        answer_media = self._get_answer_media(game_id, question.id) if game_id else None
+        answer_media = self._get_primary_question_stage_media(game_id, question.id, "answer") if game_id else None
         if answer_media is None and game_id:
-            answer_media = self._get_question_media(game_id, question.id)
+            answer_media = self._get_primary_question_stage_media(game_id, question.id, "question")
 
         self.services.presentation_service.show_answer(
             question=question,
             round_title=round_title,
             resolved_answer=self._resolve_answer_text(question),
             options=self._build_question_options(question),
+            option_media_paths=self._build_option_media_paths(game_id, question.id) if game_id else [],
             highlighted_option_index=self._resolve_answer_option_index(question),
-            logo=self._get_game_logo(game_id) if game_id else None,
+            logo=None,
             answer_media=answer_media,
+            top_left_text=self._build_question_counter_text(question, round_questions),
+            top_right_text=f"Очки: {question.points}",
+        )
+        self._update_session_live_state(
+            display_phase="answer",
+            round_id=round_item.id if round_item is not None else None,
+            question_id=question.id,
         )
         self.open_projector_window()
 
@@ -708,6 +761,11 @@ class MainWindow(QMainWindow):
             round_titles=[round_item.title for round_item in rounds],
             logo=self._get_game_logo(game.id),
         )
+        self._update_session_live_state(
+            display_phase="scores",
+            round_id=self._resolve_active_round().id if self._resolve_active_round() is not None else None,
+            question_id=None,
+        )
         self.open_projector_window()
 
     def show_score_column(self) -> None:
@@ -725,6 +783,11 @@ class MainWindow(QMainWindow):
             totals_only=True,
             title="Колонка очков",
             footer="Показан только общий итог команд",
+        )
+        self._update_session_live_state(
+            display_phase="score_column",
+            round_id=self._resolve_active_round().id if self._resolve_active_round() is not None else None,
+            question_id=None,
         )
         self.open_projector_window()
 
@@ -744,6 +807,7 @@ class MainWindow(QMainWindow):
             teams=teams,
             logo=self._get_game_logo(game.id),
         )
+        self._update_session_live_state(display_phase="teams", round_id=None, question_id=None)
         self.open_projector_window()
 
     def show_winners_screen(self) -> None:
@@ -762,6 +826,7 @@ class MainWindow(QMainWindow):
             winners=winners,
             logo=self._get_game_logo(game.id),
         )
+        self._update_session_live_state(display_phase="winners", round_id=None, question_id=None)
         self.open_projector_window()
 
     def show_game_media_asset(self, media_id: int) -> None:
@@ -780,6 +845,11 @@ class MainWindow(QMainWindow):
             media=media,
             logo=self._get_game_logo(game.id),
         )
+        self._update_session_live_state(
+            display_phase="media",
+            round_id=media.round_id,
+            question_id=media.question_id,
+        )
         self.open_projector_window()
 
     def show_connection_code_screen(self) -> None:
@@ -793,6 +863,7 @@ class MainWindow(QMainWindow):
             connection_code=self._build_connection_code(game.id),
             logo=self._get_game_logo(game.id),
         )
+        self._update_session_live_state(display_phase="qr", round_id=None, question_id=None)
         self.open_projector_window()
 
     def show_round_by_id(self, round_id: int) -> None:
@@ -813,18 +884,26 @@ class MainWindow(QMainWindow):
     def show_question_by_id(self, question_id: int) -> None:
         if question_id <= 0:
             return
-        if hasattr(self.games_page, "_select_question"):
-            self.games_page._select_question(question_id)
-        self.refresh_context_panels()
-        self.show_selected_question()
-
-    def show_answer_by_id(self, question_id: int) -> None:
-        if question_id <= 0:
+        question = self.services.question_service.get_question(question_id)
+        if question is None:
+            self._show_warning("Вопрос не найден.")
             return
         if hasattr(self.games_page, "_select_question"):
             self.games_page._select_question(question_id)
         self.refresh_context_panels()
-        self.show_answer_screen()
+        self._present_question(question)
+
+    def show_answer_by_id(self, question_id: int) -> None:
+        if question_id <= 0:
+            return
+        question = self.services.question_service.get_question(question_id)
+        if question is None:
+            self._show_warning("Вопрос не найден.")
+            return
+        if hasattr(self.games_page, "_select_question"):
+            self.games_page._select_question(question_id)
+        self.refresh_context_panels()
+        self._present_answer(question)
 
     def start_timer_for_question(self, question_id: int) -> None:
         if question_id <= 0:
@@ -878,7 +957,7 @@ class MainWindow(QMainWindow):
             self._show_warning("Сначала выберите вопрос и игру.")
             return
 
-        media = self._get_question_media(game.id, question.id)
+        media = self._get_primary_question_stage_media(game.id, question.id, "question")
         if media is None:
             self._show_warning("У этого вопроса нет отдельного медиа вопроса.")
             return
@@ -903,7 +982,7 @@ class MainWindow(QMainWindow):
             self._show_warning("Сначала выберите вопрос и игру.")
             return
 
-        media = self._get_answer_media(game.id, question.id)
+        media = self._get_primary_question_stage_media(game.id, question.id, "answer")
         if media is None:
             self._show_warning("У этого вопроса нет отдельного медиа ответа.")
             return
@@ -928,6 +1007,11 @@ class MainWindow(QMainWindow):
                 round_item.id,
             )
         self.services.timer_service.pause()
+        self._update_session_live_state(
+            display_phase="waiting",
+            round_id=round_item.id,
+            question_id=self._resolve_active_question().id if self._resolve_active_question() is not None else None,
+        )
         self.refresh_context_panels()
         self.show_waiting_screen()
 
@@ -962,6 +1046,41 @@ class MainWindow(QMainWindow):
         self.media_page.set_current_game(game_id)
         self.teams_page.set_current_session(session_id, game_id)
         self.scores_page.set_current_session(session_id, game_id)
+
+    def _restore_live_session_state(self, session) -> None:
+        rounds = self.services.round_service.list_rounds_by_game(session.game_id)
+        if (
+            session.active_round_id is not None
+            and hasattr(self.games_page, "_select_round")
+        ):
+            self.games_page._select_round(session.active_round_id)
+        elif rounds and self.games_page.get_selected_round() is None and hasattr(self.games_page, "_select_round"):
+            self.games_page._select_round(rounds[0].id)
+
+        if (
+            session.active_question_id is not None
+            and hasattr(self.games_page, "_select_question")
+        ):
+            self.games_page._select_question(session.active_question_id)
+
+    def _resume_session_presentation(self, session) -> None:
+        handlers = {
+            "welcome": self.show_welcome_screen,
+            "waiting": self.show_waiting_screen,
+            "round": self.show_selected_round,
+            "question": self.show_selected_question,
+            "answer": self.show_answer_screen,
+            "scores": self.show_scoreboard,
+            "score_column": self.show_score_column,
+            "teams": self.show_teams_screen,
+            "winners": self.show_winners_screen,
+            "qr": self.show_connection_code_screen,
+            "sponsor": self.show_partner_block,
+        }
+        handler = handlers.get(session.display_phase)
+        if handler is None:
+            return
+        handler()
 
     def _get_live_teams(self, game_id: int):
         if self.running_session_id is not None:
@@ -1037,6 +1156,37 @@ class MainWindow(QMainWindow):
             usage_role="answer",
         )
 
+    def _get_primary_question_stage_media(self, game_id: int, question_id: int, stage: str):
+        role_priority = {
+            "question": ["question_image", "question_video", "question_audio", "question"],
+            "answer": ["answer_image", "answer_video", "answer_audio", "answer"],
+        }.get(stage, [])
+        for usage_role in role_priority:
+            media = self.services.media_service.find_media_for_question(
+                game_id=game_id,
+                question_id=question_id,
+                usage_role=usage_role,
+            )
+            if media is not None:
+                return media
+        return None
+
+    def _build_option_media_paths(self, game_id: int, question_id: int) -> list[str | None]:
+        result: list[str | None] = []
+        for usage_role in (
+            "option_a_image",
+            "option_b_image",
+            "option_c_image",
+            "option_d_image",
+        ):
+            media = self.services.media_service.find_media_for_question(
+                game_id=game_id,
+                question_id=question_id,
+                usage_role=usage_role,
+            )
+            result.append(media.file_path if media is not None else None)
+        return result
+
     def _build_question_options(self, question) -> list[str]:
         if question.question_type != "abcd":
             return []
@@ -1082,10 +1232,44 @@ class MainWindow(QMainWindow):
         else:
             self.services.timer_service.clear()
 
+    @staticmethod
+    def _build_question_counter_text(question, round_questions) -> str:
+        total_questions = len(round_questions or [])
+        if total_questions > 0:
+            return f"Вопрос {question.order_index}/{total_questions}"
+        return f"Вопрос {question.order_index}"
+
     def _resolve_question_timer(self, question) -> tuple[int, str]:
         if question.timer_seconds > 0:
             return question.timer_seconds, "Таймер вопроса"
+        round_item = self.services.round_service.get_round(question.round_id)
+        if round_item is not None and round_item.timer_seconds > 0:
+            return round_item.timer_seconds, f"Таймер раунда «{round_item.title}»"
         return 0, "Без таймера"
+
+    def _update_session_live_state(
+        self,
+        display_phase: str,
+        round_id: int | None,
+        question_id: int | None,
+    ) -> None:
+        if self.running_session_id is None:
+            return
+        self.services.game_session_service.update_live_state(
+            session_id=self.running_session_id,
+            active_round_id=round_id,
+            active_question_id=question_id,
+            display_phase=display_phase,
+        )
+
+    @staticmethod
+    def _round_type_label(round_type: str) -> str:
+        return {
+            "standard": "Стандартный раунд",
+            "media": "Медиа-раунд",
+            "blitz": "Блиц",
+            "final": "Финал",
+        }.get(round_type, round_type)
 
     @staticmethod
     def _build_connection_code(game_id: int) -> str:
@@ -1178,19 +1362,24 @@ class MainWindow(QMainWindow):
 
     def toggle_fullscreen(self) -> None:
         if self.isFullScreen():
-            self.showMaximized()
+            self.setWindowState((self.windowState() & ~Qt.WindowFullScreen) | Qt.WindowMaximized)
+            self.show()
         else:
-            self.showFullScreen()
+            self.setWindowState(self.windowState() | Qt.WindowFullScreen)
+            self.show()
 
     def toggle_maximized(self) -> None:
         if self.isFullScreen():
-            self.showNormal()
+            self.setWindowState((self.windowState() & ~Qt.WindowFullScreen) | Qt.WindowMaximized)
+            self.show()
             return
 
         if self.isMaximized():
+            self.setWindowState(self.windowState() & ~Qt.WindowMaximized)
             self.showNormal()
         else:
-            self.showMaximized()
+            self.setWindowState(self.windowState() | Qt.WindowMaximized)
+            self.show()
 
     def changeEvent(self, event) -> None:  # type: ignore[override]
         if event.type() == QEvent.Type.WindowStateChange:

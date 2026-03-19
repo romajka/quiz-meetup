@@ -28,9 +28,11 @@ class GameSessionRepository:
         cursor = self.database.execute(
             """
             INSERT INTO game_sessions (
-                game_id, session_number, status, completed_round_ids, started_at, updated_at, finished_at
+                game_id, session_number, status, completed_round_ids,
+                active_round_id, active_question_id, display_phase,
+                started_at, updated_at, finished_at
             )
-            VALUES (?, ?, 'active', '', ?, ?, NULL)
+            VALUES (?, ?, 'active', '', NULL, NULL, 'waiting', ?, ?, NULL)
             """,
             (game_id, session_number, timestamp, timestamp),
         )
@@ -91,6 +93,24 @@ class GameSessionRepository:
         )
         return self.get_by_id(session_id)
 
+    def update_live_state(
+        self,
+        session_id: int,
+        active_round_id: int | None,
+        active_question_id: int | None,
+        display_phase: str,
+    ) -> GameSession | None:
+        timestamp = datetime.utcnow().isoformat(timespec="seconds")
+        self.database.execute(
+            """
+            UPDATE game_sessions
+            SET active_round_id = ?, active_question_id = ?, display_phase = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (active_round_id, active_question_id, display_phase, timestamp, session_id),
+        )
+        return self.get_by_id(session_id)
+
     def finish(self, session_id: int) -> GameSession | None:
         timestamp = datetime.utcnow().isoformat(timespec="seconds")
         self.database.execute(
@@ -111,8 +131,10 @@ class GameSessionRepository:
             session_number=row["session_number"],
             status=row["status"],
             completed_round_ids=row["completed_round_ids"],
+            active_round_id=row["active_round_id"] if "active_round_id" in row.keys() else None,
+            active_question_id=row["active_question_id"] if "active_question_id" in row.keys() else None,
+            display_phase=row["display_phase"] if "display_phase" in row.keys() else "waiting",
             started_at=row["started_at"],
             updated_at=row["updated_at"],
             finished_at=row["finished_at"],
         )
-

@@ -6,11 +6,27 @@ from quiz_meetup.resources import read_text_resource
 
 def initialize_database(database: Database) -> None:
     database.executescript(read_text_resource("database", "schema.sql"))
+    _migrate_rounds_table(database)
     _migrate_game_sessions_table(database)
     _migrate_questions_table(database)
     _migrate_media_assets_table(database)
     _migrate_teams_table(database)
     _migrate_score_entries_table(database)
+
+
+def _migrate_rounds_table(database: Database) -> None:
+    existing_columns = {
+        row["name"] for row in database.fetchall("PRAGMA table_info(rounds)")
+    }
+    required_columns = {
+        "round_type": "TEXT NOT NULL DEFAULT 'standard'",
+        "settings_text": "TEXT NOT NULL DEFAULT ''",
+    }
+    for column_name, definition in required_columns.items():
+        if column_name not in existing_columns:
+            database.execute(
+                f"ALTER TABLE rounds ADD COLUMN {column_name} {definition}"
+            )
 
 
 def _migrate_game_sessions_table(database: Database) -> None:
@@ -22,18 +38,42 @@ def _migrate_game_sessions_table(database: Database) -> None:
             session_number INTEGER NOT NULL,
             status TEXT NOT NULL DEFAULT 'active',
             completed_round_ids TEXT NOT NULL DEFAULT '',
+            active_round_id INTEGER,
+            active_question_id INTEGER,
+            display_phase TEXT NOT NULL DEFAULT 'waiting',
             started_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             finished_at TEXT,
-            FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE
+            FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE,
+            FOREIGN KEY (active_round_id) REFERENCES rounds(id) ON DELETE SET NULL,
+            FOREIGN KEY (active_question_id) REFERENCES questions(id) ON DELETE SET NULL
         )
         """
     )
+    existing_columns = {
+        row["name"] for row in database.fetchall("PRAGMA table_info(game_sessions)")
+    }
+    required_columns = {
+        "active_round_id": "INTEGER",
+        "active_question_id": "INTEGER",
+        "display_phase": "TEXT NOT NULL DEFAULT 'waiting'",
+    }
+    for column_name, definition in required_columns.items():
+        if column_name not in existing_columns:
+            database.execute(
+                f"ALTER TABLE game_sessions ADD COLUMN {column_name} {definition}"
+            )
     database.execute(
         "CREATE INDEX IF NOT EXISTS idx_game_sessions_game_id ON game_sessions(game_id)"
     )
     database.execute(
         "CREATE INDEX IF NOT EXISTS idx_game_sessions_status ON game_sessions(status)"
+    )
+    database.execute(
+        "CREATE INDEX IF NOT EXISTS idx_game_sessions_active_round_id ON game_sessions(active_round_id)"
+    )
+    database.execute(
+        "CREATE INDEX IF NOT EXISTS idx_game_sessions_active_question_id ON game_sessions(active_question_id)"
     )
 
 

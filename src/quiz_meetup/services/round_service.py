@@ -12,13 +12,17 @@ class RoundService:
         self,
         game_id: int,
         title: str,
+        round_type: str,
         order_index: int | None,
         timer_seconds: int,
+        settings_text: str,
         notes: str,
     ) -> Round:
         normalized_title = title.strip()
         if not normalized_title:
             raise ValueError("Название раунда не может быть пустым.")
+        normalized_type = self._normalize_round_type(round_type)
+        normalized_timer = self._normalize_timer(timer_seconds)
         next_order_index = (
             order_index
             if order_index is not None
@@ -27,8 +31,10 @@ class RoundService:
         return self.repository.create(
             game_id=game_id,
             title=normalized_title,
+            round_type=normalized_type,
             order_index=next_order_index,
-            timer_seconds=timer_seconds,
+            timer_seconds=normalized_timer,
+            settings_text=settings_text.strip(),
             notes=notes.strip(),
         )
 
@@ -36,17 +42,23 @@ class RoundService:
         self,
         round_id: int,
         title: str,
+        round_type: str,
         timer_seconds: int,
+        settings_text: str,
         notes: str,
     ) -> Round:
         normalized_title = title.strip()
         if not normalized_title:
             raise ValueError("Название раунда не может быть пустым.")
+        normalized_type = self._normalize_round_type(round_type)
+        normalized_timer = self._normalize_timer(timer_seconds)
 
         updated_round = self.repository.update(
             round_id=round_id,
             title=normalized_title,
-            timer_seconds=timer_seconds,
+            round_type=normalized_type,
+            timer_seconds=normalized_timer,
+            settings_text=settings_text.strip(),
             notes=notes.strip(),
         )
         if updated_round is None:
@@ -106,3 +118,16 @@ class RoundService:
         for order_index, round_item in enumerate(rounds, start=1):
             if round_item.order_index != order_index:
                 self.repository.update_order(round_item.id, order_index)
+
+    @staticmethod
+    def _normalize_round_type(round_type: str) -> str:
+        normalized = round_type.strip().lower()
+        if normalized not in {"standard", "media", "blitz", "final"}:
+            raise ValueError("Неизвестный тип раунда.")
+        return normalized
+
+    @staticmethod
+    def _normalize_timer(timer_seconds: int) -> int:
+        if timer_seconds < 0:
+            raise ValueError("Таймер раунда не может быть отрицательным.")
+        return timer_seconds

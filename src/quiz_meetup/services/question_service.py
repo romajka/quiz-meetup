@@ -186,10 +186,7 @@ class QuestionService:
             "option_c": option_c.strip(),
             "option_d": option_d.strip(),
         }
-        if question_type == "abcd":
-            if not all(normalized.values()):
-                raise ValueError("Для вопроса ABCD нужно заполнить все четыре варианта ответа.")
-        else:
+        if question_type != "abcd":
             normalized = {key: "" for key in normalized}
         return normalized
 

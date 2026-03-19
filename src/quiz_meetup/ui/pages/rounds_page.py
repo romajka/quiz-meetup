@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QAbstractSpinBox,
     QComboBox,
     QFrame,
     QHBoxLayout,
@@ -53,25 +54,46 @@ class RoundsPage(QWidget):
         self.order_input.setMinimum(1)
         self.order_input.setMaximum(999)
         self.order_input.setValue(1)
+        self.order_input.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        self.order_input.setReadOnly(True)
+
+        self.round_type_combo = QComboBox()
+        self.round_type_combo.addItem("Стандартный", "standard")
+        self.round_type_combo.addItem("Медиа-раунд", "media")
+        self.round_type_combo.addItem("Блиц", "blitz")
+        self.round_type_combo.addItem("Финал", "final")
+
+        self.timer_input = QSpinBox()
+        self.timer_input.setRange(0, 900)
+        self.timer_input.setSpecialValueText("Без таймера")
+        self.timer_input.setSuffix(" сек")
+        self.timer_input.setValue(DEFAULT_ROUND_TIMER_SECONDS)
+
+        self.settings_input = QTextEdit()
+        self.settings_input.setPlaceholderText("Правила и настройки этого раунда.")
+        self.settings_input.setFixedHeight(96)
 
         self.notes_input = QTextEdit()
         self.notes_input.setPlaceholderText("Заметки для ведущего по этому раунду.")
         self.notes_input.setFixedHeight(120)
 
-        self.new_round_button = QPushButton("Новый раунд")
+        self.new_round_button = QPushButton("Добавить раунд")
         self.new_round_button.setObjectName("SecondaryButton")
         self.save_round_button = QPushButton("Создать раунд")
         self.save_round_button.setObjectName("AccentButton")
         self.delete_round_button = QPushButton("Удалить раунд")
         self.delete_round_button.setObjectName("DangerButton")
-        self.move_up_button = QPushButton("Выше")
+        self.move_up_button = QPushButton("Поднять выше")
         self.move_up_button.setObjectName("SecondaryButton")
-        self.move_down_button = QPushButton("Ниже")
+        self.move_down_button = QPushButton("Опустить ниже")
         self.move_down_button.setObjectName("SecondaryButton")
 
         self.details_label = QLabel("Сначала выберите игру.")
         self.details_label.setWordWrap(True)
         self.details_label.setObjectName("DetailsLabel")
+        self.order_hint_label = QLabel("Порядок раундов меняется кнопками сверху. Список идёт сверху вниз.")
+        self.order_hint_label.setWordWrap(True)
+        self.order_hint_label.setObjectName("PageHint")
 
         for button in (
             self.new_round_button,
@@ -109,6 +131,7 @@ class RoundsPage(QWidget):
         top_actions_layout.addWidget(self.move_up_button)
         top_actions_layout.addWidget(self.move_down_button)
         left_layout.addLayout(top_actions_layout)
+        left_layout.addWidget(self.order_hint_label)
         left_layout.addWidget(self.rounds_list, 1)
         self.rounds_list.setMinimumHeight(380)
 
@@ -121,6 +144,12 @@ class RoundsPage(QWidget):
         right_layout.addWidget(self.title_input)
         right_layout.addWidget(QLabel("Порядок"))
         right_layout.addWidget(self.order_input)
+        right_layout.addWidget(QLabel("Тип раунда"))
+        right_layout.addWidget(self.round_type_combo)
+        right_layout.addWidget(QLabel("Таймер по умолчанию"))
+        right_layout.addWidget(self.timer_input)
+        right_layout.addWidget(QLabel("Настройки раунда"))
+        right_layout.addWidget(self.settings_input)
         right_layout.addWidget(QLabel("Заметки"))
         right_layout.addWidget(self.notes_input)
 
@@ -212,8 +241,10 @@ class RoundsPage(QWidget):
             round_item = self.round_service.create_round(
                 game_id=game.id,
                 title=f"Новый раунд {next_order}",
+                round_type="standard",
                 order_index=next_order,
                 timer_seconds=DEFAULT_ROUND_TIMER_SECONDS,
+                settings_text="",
                 notes="",
             )
         except ValueError as error:
@@ -240,16 +271,19 @@ class RoundsPage(QWidget):
                 round_item = self.round_service.create_round(
                     game_id=game.id,
                     title=self.title_input.toPlainText(),
+                    round_type=str(self.round_type_combo.currentData()),
                     order_index=self.order_input.value(),
-                    timer_seconds=DEFAULT_ROUND_TIMER_SECONDS,
+                    timer_seconds=self.timer_input.value(),
+                    settings_text=self.settings_input.toPlainText(),
                     notes=self.notes_input.toPlainText(),
                 )
             else:
-                current_round = self.get_selected_round()
                 round_item = self.round_service.update_round(
                     round_id=self.current_round_id,
                     title=self.title_input.toPlainText(),
-                    timer_seconds=current_round.timer_seconds if current_round is not None else DEFAULT_ROUND_TIMER_SECONDS,
+                    round_type=str(self.round_type_combo.currentData()),
+                    timer_seconds=self.timer_input.value(),
+                    settings_text=self.settings_input.toPlainText(),
                     notes=self.notes_input.toPlainText(),
                 )
         except ValueError as error:
@@ -319,7 +353,9 @@ class RoundsPage(QWidget):
         if game is not None:
             for round_item in self.round_service.list_rounds_by_game(game.id):
                 item = QListWidgetItem(
-                    f"{round_item.order_index}. {round_item.title}"
+                    f"{round_item.order_index}. {round_item.title} · "
+                    f"{self._round_type_label(round_item.round_type)} · "
+                    f"{round_item.timer_seconds if round_item.timer_seconds > 0 else 'без таймера'}"
                 )
                 item.setData(Qt.UserRole, round_item.id)
                 self.rounds_list.addItem(item)
@@ -363,6 +399,9 @@ class RoundsPage(QWidget):
         self._loading_state = True
         self.title_input.setPlainText(round_item.title)
         self.order_input.setValue(round_item.order_index)
+        self._set_combo_to_value(self.round_type_combo, round_item.round_type)
+        self.timer_input.setValue(round_item.timer_seconds)
+        self.settings_input.setPlainText(round_item.settings_text)
         self.notes_input.setPlainText(round_item.notes)
         self._loading_state = False
         self._update_details()
@@ -377,8 +416,10 @@ class RoundsPage(QWidget):
         notes = round_item.notes or "Заметки не заполнены."
         self.details_label.setText(
             f"Название: {round_item.title}\n\n"
+            f"Тип: {self._round_type_label(round_item.round_type)}\n"
             f"Порядок: {round_item.order_index}\n"
-            f"Режим игры: Презентация / Команды\n\n"
+            f"Таймер по умолчанию: {round_item.timer_seconds if round_item.timer_seconds > 0 else 'без таймера'}\n\n"
+            f"Настройки: {round_item.settings_text or 'Не заполнены.'}\n\n"
             f"Заметки: {notes}"
         )
 
@@ -399,7 +440,14 @@ class RoundsPage(QWidget):
         has_game = self.get_selected_game() is not None
         has_round = self.current_round_id is not None
 
-        for widget in (self.title_input, self.order_input, self.notes_input):
+        for widget in (
+            self.title_input,
+            self.order_input,
+            self.round_type_combo,
+            self.timer_input,
+            self.settings_input,
+            self.notes_input,
+        ):
             widget.setEnabled(has_game)
 
         self.new_round_button.setEnabled(has_game)
@@ -414,6 +462,9 @@ class RoundsPage(QWidget):
         self._loading_state = True
         self.title_input.clear()
         self.order_input.setValue(1)
+        self.round_type_combo.setCurrentIndex(0)
+        self.timer_input.setValue(DEFAULT_ROUND_TIMER_SECONDS)
+        self.settings_input.clear()
         self.notes_input.clear()
         self._loading_state = False
 
@@ -423,3 +474,17 @@ class RoundsPage(QWidget):
             return 1
         rounds = self.round_service.list_rounds_by_game(game.id)
         return len(rounds) + 1
+
+    @staticmethod
+    def _round_type_label(round_type: str) -> str:
+        return {
+            "standard": "Стандартный",
+            "media": "Медиа-раунд",
+            "blitz": "Блиц",
+            "final": "Финал",
+        }.get(round_type, round_type)
+
+    @staticmethod
+    def _set_combo_to_value(combo: QComboBox, value) -> None:
+        index = combo.findData(value)
+        combo.setCurrentIndex(index if index >= 0 else 0)

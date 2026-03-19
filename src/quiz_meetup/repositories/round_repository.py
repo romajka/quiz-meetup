@@ -12,16 +12,18 @@ class RoundRepository:
         self,
         game_id: int,
         title: str,
+        round_type: str,
         order_index: int,
         timer_seconds: int,
+        settings_text: str,
         notes: str,
     ) -> Round:
         cursor = self.database.execute(
             """
-            INSERT INTO rounds (game_id, title, order_index, timer_seconds, notes)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO rounds (game_id, title, round_type, order_index, timer_seconds, settings_text, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (game_id, title, order_index, timer_seconds, notes),
+            (game_id, title, round_type, order_index, timer_seconds, settings_text, notes),
         )
         return self.get_by_id(cursor.lastrowid)
 
@@ -29,16 +31,18 @@ class RoundRepository:
         self,
         round_id: int,
         title: str,
+        round_type: str,
         timer_seconds: int,
+        settings_text: str,
         notes: str,
     ) -> Round | None:
         self.database.execute(
             """
             UPDATE rounds
-            SET title = ?, timer_seconds = ?, notes = ?
+            SET title = ?, round_type = ?, timer_seconds = ?, settings_text = ?, notes = ?
             WHERE id = ?
             """,
-            (title, timer_seconds, notes, round_id),
+            (title, round_type, timer_seconds, settings_text, notes, round_id),
         )
         return self.get_by_id(round_id)
 
@@ -87,7 +91,9 @@ class RoundRepository:
             id=row["id"],
             game_id=row["game_id"],
             title=row["title"],
+            round_type=row["round_type"] if "round_type" in row.keys() else "standard",
             order_index=row["order_index"],
             timer_seconds=row["timer_seconds"],
+            settings_text=row["settings_text"] if "settings_text" in row.keys() else "",
             notes=row["notes"],
         )

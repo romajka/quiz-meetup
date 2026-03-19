@@ -16,7 +16,10 @@ class PresentationState:
     body: str = "Откройте игру в окне ведущего и выберите, что вывести на проектор."
     footer: str = ""
     badge: str = ""
+    top_left_text: str = ""
+    top_right_text: str = ""
     options: list[str] = field(default_factory=list)
+    option_media_paths: list[str | None] = field(default_factory=list)
     highlighted_option_index: int = -1
     answer_text: str = ""
     table_headers: list[str] = field(default_factory=list)
@@ -174,9 +177,12 @@ class PresentationService(QObject):
         question: Question,
         round_title: str,
         options: list[str],
+        option_media_paths: list[str | None],
         logo: MediaAsset | None = None,
         question_media: MediaAsset | None = None,
         footer_text: str | None = None,
+        top_left_text: str = "",
+        top_right_text: str = "",
     ) -> None:
         self._update_state(
             PresentationState(
@@ -190,7 +196,10 @@ class PresentationService(QObject):
                     if question.timer_seconds > 0
                     else f"Очки: {question.points}"
                 ),
+                top_left_text=top_left_text,
+                top_right_text=top_right_text,
                 options=options,
+                option_media_paths=option_media_paths,
                 highlighted_option_index=-1,
                 music_status=self._state.music_status,
                 timer_total_seconds=self._state.timer_total_seconds,
@@ -209,9 +218,12 @@ class PresentationService(QObject):
         round_title: str,
         resolved_answer: str,
         options: list[str],
+        option_media_paths: list[str | None],
         highlighted_option_index: int = -1,
         logo: MediaAsset | None = None,
         answer_media: MediaAsset | None = None,
+        top_left_text: str = "",
+        top_right_text: str = "",
     ) -> None:
         self._update_state(
             PresentationState(
@@ -220,7 +232,10 @@ class PresentationService(QObject):
                 subtitle=f"{round_title} / {question.title}",
                 body=question.prompt,
                 footer="Ответ открыт",
+                top_left_text=top_left_text,
+                top_right_text=top_right_text,
                 options=options,
+                option_media_paths=option_media_paths,
                 highlighted_option_index=highlighted_option_index,
                 answer_text=resolved_answer,
                 music_status=self._state.music_status,
@@ -346,14 +361,14 @@ class PresentationService(QObject):
                 title="",
                 subtitle="",
                 body="",
-                footer=media.title,
-                badge="Файл игры",
+                footer="",
+                badge="",
                 music_status=self._state.music_status,
                 timer_total_seconds=self._state.timer_total_seconds,
                 timer_remaining_seconds=self._state.timer_remaining_seconds,
                 timer_status=self._state.timer_status,
                 timer_source=self._state.timer_source,
-                logo_path=logo.file_path if logo is not None and not is_visual else None,
+                logo_path=None,
                 background_path=media.file_path if is_visual else None,
                 background_type=media.media_type if is_visual else None,
                 media_path=media.file_path if not is_visual else None,

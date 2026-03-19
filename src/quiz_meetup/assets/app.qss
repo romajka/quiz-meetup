@@ -20,7 +20,7 @@ QLabel#HeaderTitle {
 
 QLabel#HeaderSubtitle {
     color: #aeb8c7;
-    font-size: 14px;
+    font-size: 13px;
 }
 
 QLabel#BrandBadge {
@@ -106,9 +106,9 @@ QPushButton#SectionButton {
     color: #eef2f7;
     border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 16px;
-    padding: 16px 18px;
+    padding: 14px 14px;
     text-align: left;
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 600;
 }
 
@@ -134,6 +134,37 @@ QTableWidget {
     border-radius: 16px;
     padding: 10px 12px;
     alternate-background-color: #f8fbff;
+}
+
+QComboBox,
+QSpinBox {
+    min-height: 44px;
+    padding-right: 38px;
+}
+
+QComboBox::drop-down,
+QSpinBox::up-button,
+QSpinBox::down-button {
+    background: #f4f6fb;
+    border-left: 1px solid #e6e9f0;
+    width: 28px;
+}
+
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    border-top-right-radius: 16px;
+    border-bottom-right-radius: 16px;
+}
+
+QComboBox QAbstractItemView {
+    background: #ffffff;
+    border: 1px solid #e6e9f0;
+    border-radius: 12px;
+    padding: 6px;
+    selection-background-color: #eef1f6;
+    selection-color: #1f2430;
+    outline: none;
 }
 
 QTextEdit {
@@ -217,6 +248,32 @@ QPushButton#AccentButton {
 }
 
 QPushButton#AccentButton:hover {
+    background: #b71c1c;
+}
+
+QPushButton#CompactSecondaryButton,
+QPushButton#CompactAccentButton {
+    border-radius: 12px;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+QPushButton#CompactSecondaryButton {
+    background: #eef1f6;
+    color: #2c3442;
+}
+
+QPushButton#CompactSecondaryButton:hover {
+    background: #e5e9f1;
+}
+
+QPushButton#CompactAccentButton {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #c62828, stop:1 #e53935);
+    color: #ffffff;
+}
+
+QPushButton#CompactAccentButton:hover {
     background: #b71c1c;
 }
 
@@ -329,13 +386,13 @@ QLabel#GameCardBadge {
 
 QLabel#GameCardTitle {
     color: #242a36;
-    font-size: 18px;
+    font-size: 17px;
     font-weight: 800;
 }
 
 QLabel#GameCardMeta {
     color: #838a99;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 500;
 }
 
@@ -344,7 +401,7 @@ QPushButton#CardPrimaryButton {
     color: #ffffff;
     border: none;
     border-radius: 14px;
-    padding: 13px 18px;
+    padding: 12px 16px;
     font-weight: 700;
 }
 
@@ -357,7 +414,7 @@ QPushButton#CardStartButton {
     color: #ffffff;
     border: none;
     border-radius: 14px;
-    padding: 13px 18px;
+    padding: 12px 16px;
     font-weight: 700;
 }
 
@@ -415,6 +472,12 @@ QLabel#ProjectorLogo {
 
 QLabel#ProjectorBackground {
     background: #0f172a;
+}
+
+QLabel#ProjectorTopMeta {
+    color: #f8fafc;
+    font-size: 22px;
+    font-weight: 700;
 }
 
 QLabel#ProjectorTitle {
@@ -506,6 +569,46 @@ QProgressBar#ProjectorTimerProgress::chunk {
     border-radius: 11px;
 }
 
+QFrame#ProjectorQuestionTimerFrame {
+    background: rgba(7, 20, 39, 0.55);
+    border: 1px solid rgba(191, 219, 254, 0.14);
+    border-radius: 24px;
+    padding: 14px 18px;
+}
+
+QFrame#ProjectorQuestionTimerFrame[finished="true"] {
+    background: rgba(82, 16, 28, 0.6);
+    border: 1px solid rgba(251, 113, 133, 0.32);
+}
+
+QLabel#ProjectorQuestionTimerSource {
+    color: #cbd5e1;
+    font-size: 28px;
+    font-weight: 800;
+}
+
+QLabel#ProjectorQuestionTimerValue {
+    color: #f8fafc;
+    font-size: 62px;
+    font-weight: 900;
+}
+
+QLabel#ProjectorQuestionTimerValue[finished="true"] {
+    color: #fecdd3;
+}
+
+QProgressBar#ProjectorQuestionTimerProgress {
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 14px;
+    min-height: 28px;
+}
+
+QProgressBar#ProjectorQuestionTimerProgress::chunk {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #34d399, stop:0.6 #38bdf8, stop:1 #fbbf24);
+    border-radius: 12px;
+}
+
 QLabel#ProjectorMediaPlaceholder,
 QLabel#ProjectorMediaFrame,
 QVideoWidget#ProjectorVideoFrame {
@@ -525,15 +628,29 @@ QLabel#ProjectorOption {
     color: #eff6ff;
     border: 1px solid rgba(255, 255, 255, 0.18);
     border-radius: 22px;
-    padding: 20px 24px;
-    font-size: 24px;
-    font-weight: 600;
+    padding: 24px 28px;
+    font-size: 34px;
+    font-weight: 700;
 }
 
 QLabel#ProjectorOption[highlighted="true"] {
     background: rgba(20, 184, 166, 0.24);
     color: #f0fdfa;
-    border: 1px solid rgba(45, 212, 191, 0.5);
+    border: 2px solid rgba(45, 212, 191, 0.55);
+}
+
+QLabel#ProjectorOption[answerCorrect="true"] {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgba(5, 150, 105, 0.92), stop:1 rgba(20, 184, 166, 0.92));
+    color: #f8fffe;
+    border: 3px solid rgba(153, 246, 228, 0.95);
+    font-size: 42px;
+    font-weight: 900;
+}
+
+QLabel#ProjectorOption[answerMuted="true"] {
+    background: rgba(255, 255, 255, 0.05);
+    color: #c6d4e7;
+    border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 QLabel#ProjectorAnswer {
@@ -573,17 +690,18 @@ QTableWidget#ProjectorScoreTable QHeaderView::section {
 QFrame#ProjectorWinnerCard {
     background: rgba(255, 255, 255, 0.08);
     border: 1px solid rgba(255, 255, 255, 0.16);
-    border-radius: 28px;
+    border-radius: 30px;
 }
 
 QFrame#ProjectorWinnerCard[champion="true"] {
-    border: 1px solid rgba(250, 204, 21, 0.42);
+    border: 2px solid rgba(250, 204, 21, 0.42);
 }
 
 QLabel#ProjectorWinnerPlace {
-    color: #cfe0ff;
+    color: #dbeafe;
     font-size: 18px;
-    font-weight: 700;
+    font-weight: 800;
+    letter-spacing: 0.6px;
 }
 
 QLabel#ProjectorWinnerTeam {
@@ -593,7 +711,7 @@ QLabel#ProjectorWinnerTeam {
 }
 
 QLabel#ProjectorWinnerScore {
-    color: #bfdbfe;
+    color: #d7e7ff;
     font-size: 18px;
-    font-weight: 700;
+    font-weight: 800;
 }

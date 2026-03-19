@@ -66,8 +66,10 @@ class GameService:
             copied_round = self.round_repository.create(
                 game_id=copied_game.id,
                 title=round_item.title,
+                round_type=round_item.round_type,
                 order_index=round_item.order_index,
                 timer_seconds=round_item.timer_seconds,
+                settings_text=round_item.settings_text,
                 notes=round_item.notes,
             )
             round_id_map[round_item.id] = copied_round.id

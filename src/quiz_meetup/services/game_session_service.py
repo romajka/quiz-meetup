@@ -38,6 +38,20 @@ class GameSessionService:
         completed_round_ids.add(round_id)
         return self.repository.set_completed_round_ids(session_id, sorted(completed_round_ids))
 
+    def update_live_state(
+        self,
+        session_id: int,
+        active_round_id: int | None,
+        active_question_id: int | None,
+        display_phase: str,
+    ) -> GameSession | None:
+        normalized_phase = (display_phase or "waiting").strip().lower() or "waiting"
+        return self.repository.update_live_state(
+            session_id=session_id,
+            active_round_id=active_round_id,
+            active_question_id=active_question_id,
+            display_phase=normalized_phase,
+        )
+
     def finish_session(self, session_id: int) -> GameSession | None:
         return self.repository.finish(session_id)
-

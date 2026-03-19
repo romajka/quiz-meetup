@@ -24,12 +24,24 @@ class MediaService:
 
     ROLE_LABELS: dict[str, str] = {
         "library": "Без привязки",
+        "rules": "Правила",
         "game_splash": "Заставка игры",
         "game_logo": "Логотип",
         "waiting_background": "Фон ожидания",
+        "pause": "Пауза",
         "round": "Раунд",
         "question": "Вопрос",
+        "question_image": "Вопрос: картинка",
+        "question_video": "Вопрос: видео",
+        "question_audio": "Вопрос: аудио",
         "answer": "Ответ",
+        "answer_image": "Ответ: картинка",
+        "answer_video": "Ответ: видео",
+        "answer_audio": "Ответ: аудио",
+        "option_a_image": "ABCD: картинка A",
+        "option_b_image": "ABCD: картинка B",
+        "option_c_image": "ABCD: картинка C",
+        "option_d_image": "ABCD: картинка D",
         "sponsor": "Партнёры / спонсоры",
         "background_music": "Фоновая музыка",
     }
@@ -88,6 +100,13 @@ class MediaService:
     def get_media(self, media_id: int) -> MediaAsset | None:
         return self.repository.get_by_id(media_id)
 
+    def list_game_level_media(self, game_id: int) -> list[MediaAsset]:
+        return [
+            media
+            for media in self.repository.list_by_game(game_id)
+            if media.round_id is None and media.question_id is None
+        ]
+
     def find_media_for_game(
         self,
         game_id: int,
@@ -123,6 +142,19 @@ class MediaService:
                 return media
         return None
 
+    def list_media_for_question(
+        self,
+        game_id: int,
+        question_id: int,
+        usage_roles: list[str] | None = None,
+    ) -> list[MediaAsset]:
+        allowed_roles = set(usage_roles or self.question_usage_roles())
+        return [
+            media
+            for media in self.repository.list_by_game(game_id)
+            if media.question_id == question_id and media.usage_role in allowed_roles
+        ]
+
     def set_question_media(
         self,
         game_id: int,
@@ -131,7 +163,7 @@ class MediaService:
         source_path: str,
         title: str,
     ) -> MediaAsset:
-        if usage_role not in {"question", "answer"}:
+        if not self.is_question_bound_role(usage_role):
             raise ValueError("Для вопроса можно назначать только медиа вопроса или ответа.")
 
         created_media = self.import_media(
@@ -142,11 +174,12 @@ class MediaService:
             question_id=question_id,
         )
 
-        for media in self.repository.list_by_game(game_id):
-            if media.id == created_media.id:
-                continue
-            if media.question_id == question_id and media.usage_role == usage_role:
-                self.delete_media(media.id)
+        self._delete_other_question_media(
+            game_id=game_id,
+            question_id=question_id,
+            usage_role=usage_role,
+            keep_media_id=created_media.id,
+        )
         return created_media
 
     def assign_existing_media_to_question(
@@ -155,7 +188,7 @@ class MediaService:
         question_id: int,
         usage_role: str,
     ) -> MediaAsset:
-        if usage_role not in {"question", "answer"}:
+        if not self.is_question_bound_role(usage_role):
             raise ValueError("Для вопроса можно назначать только медиа вопроса или ответа.")
 
         media = self.repository.get_by_id(media_id)
@@ -163,12 +196,6 @@ class MediaService:
             raise ValueError("Выбранный медиафайл не найден.")
         if media.game_id is None:
             raise ValueError("Медиафайл не привязан к игре.")
-
-        for item in self.repository.list_by_game(media.game_id):
-            if item.id == media.id:
-                continue
-            if item.question_id == question_id and item.usage_role == usage_role:
-                self.delete_media(item.id)
 
         updated_media = self.repository.update_metadata(
             media_id=media.id,
@@ -179,6 +206,12 @@ class MediaService:
         )
         if updated_media is None:
             raise ValueError("Не удалось назначить медиафайл.")
+        self._delete_other_question_media(
+            game_id=media.game_id,
+            question_id=question_id,
+            usage_role=usage_role,
+            keep_media_id=updated_media.id,
+        )
         return updated_media
 
     def clear_question_media(
@@ -187,9 +220,8 @@ class MediaService:
         question_id: int,
         usage_role: str,
     ) -> None:
-        for media in self.repository.list_by_game(game_id):
-            if media.question_id == question_id and media.usage_role == usage_role:
-                self.delete_media(media.id)
+        for media in self.list_media_for_question(game_id, question_id, [usage_role]):
+            self.delete_media(media.id)
 
     def update_media_assignment(
         self,
@@ -309,22 +341,76 @@ class MediaService:
 
         if usage_role == "round" and round_id is None:
             raise ValueError("Для привязки к раунду нужно выбрать раунд.")
-        if usage_role in {"question", "answer"} and question_id is None:
+        if self.is_question_bound_role(usage_role) and question_id is None:
             raise ValueError("Для привязки к вопросу или ответу нужно выбрать вопрос.")
         if usage_role != "round":
             round_id = None
-        if usage_role not in {"question", "answer"}:
+        if not self.is_question_bound_role(usage_role):
             question_id = None
 
         if usage_role == "background_music" and media_type != "audio":
             raise ValueError("Для фоновой музыки можно выбрать только аудиофайл.")
         if usage_role == "game_logo" and media_type != "image":
             raise ValueError("Логотип должен быть изображением.")
-        if usage_role in {"game_splash", "sponsor"} and media_type not in {"image", "video"}:
+        if usage_role in {"game_splash", "sponsor", "rules", "pause"} and media_type not in {"image", "video"}:
             raise ValueError("Для заставки и спонсорского блока подходят только изображения или видео.")
         if usage_role == "waiting_background" and media_type not in {"image", "video"}:
             raise ValueError("Для фона ожидания подходят только изображения или видео.")
+        expected_media_type = self.expected_media_type_for_role(usage_role)
+        if expected_media_type is not None and media_type != expected_media_type:
+            raise ValueError(
+                f"Для роли «{self.role_label(usage_role)}» нужен файл типа {expected_media_type}."
+            )
         return round_id, question_id
 
     def role_label(self, usage_role: str) -> str:
         return self.ROLE_LABELS.get(usage_role, usage_role)
+
+    @classmethod
+    def question_usage_roles(cls) -> list[str]:
+        return [
+            "question",
+            "question_image",
+            "question_video",
+            "question_audio",
+            "answer",
+            "answer_image",
+            "answer_video",
+            "answer_audio",
+            "option_a_image",
+            "option_b_image",
+            "option_c_image",
+            "option_d_image",
+        ]
+
+    @classmethod
+    def is_question_bound_role(cls, usage_role: str) -> bool:
+        return usage_role in cls.question_usage_roles()
+
+    @staticmethod
+    def expected_media_type_for_role(usage_role: str) -> str | None:
+        media_type_by_role = {
+            "question_image": "image",
+            "question_video": "video",
+            "question_audio": "audio",
+            "answer_image": "image",
+            "answer_video": "video",
+            "answer_audio": "audio",
+            "option_a_image": "image",
+            "option_b_image": "image",
+            "option_c_image": "image",
+            "option_d_image": "image",
+        }
+        return media_type_by_role.get(usage_role)
+
+    def _delete_other_question_media(
+        self,
+        game_id: int,
+        question_id: int,
+        usage_role: str,
+        keep_media_id: int,
+    ) -> None:
+        for media in self.list_media_for_question(game_id, question_id, [usage_role]):
+            if media.id == keep_media_id:
+                continue
+            self.delete_media(media.id)

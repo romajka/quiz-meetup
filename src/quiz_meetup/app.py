@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 
 from quiz_meetup.config import APP_NAME
@@ -94,6 +95,7 @@ def main() -> int:
         app_data_dir=paths.app_data_dir,
         media_dir=paths.media_dir,
     )
-    window.showMaximized()
+    window.show()
+    QTimer.singleShot(0, window.showMaximized)
 
     return application.exec()

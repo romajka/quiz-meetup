@@ -10,8 +10,10 @@ CREATE TABLE IF NOT EXISTS rounds (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     game_id INTEGER NOT NULL,
     title TEXT NOT NULL,
+    round_type TEXT NOT NULL DEFAULT 'standard',
     order_index INTEGER NOT NULL DEFAULT 1,
     timer_seconds INTEGER NOT NULL DEFAULT 60,
+    settings_text TEXT NOT NULL DEFAULT '',
     notes TEXT NOT NULL DEFAULT '',
     FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE
 );
@@ -62,10 +64,15 @@ CREATE TABLE IF NOT EXISTS game_sessions (
     session_number INTEGER NOT NULL,
     status TEXT NOT NULL DEFAULT 'active',
     completed_round_ids TEXT NOT NULL DEFAULT '',
+    active_round_id INTEGER,
+    active_question_id INTEGER,
+    display_phase TEXT NOT NULL DEFAULT 'waiting',
     started_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     finished_at TEXT,
-    FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE
+    FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE,
+    FOREIGN KEY (active_round_id) REFERENCES rounds(id) ON DELETE SET NULL,
+    FOREIGN KEY (active_question_id) REFERENCES questions(id) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_game_sessions_game_id ON game_sessions(game_id);
