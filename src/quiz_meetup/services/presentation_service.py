@@ -36,6 +36,7 @@ class PresentationState:
     background_type: str | None = None
     media_path: str | None = None
     media_type: str | None = None
+    emphasize_media: bool = False
 
 
 class PresentationService(QObject):
@@ -153,13 +154,15 @@ class PresentationService(QObject):
         logo: MediaAsset | None = None,
         round_media: MediaAsset | None = None,
         footer_text: str | None = None,
+        subtitle_text: str | None = None,
+        body_text: str | None = None,
     ) -> None:
         self._update_state(
             PresentationState(
                 scene="round",
                 title=round_item.title,
-                subtitle=f"Раунд игры «{game_title}»",
-                body=round_item.notes or "Приготовьтесь к следующему раунду.",
+                subtitle=subtitle_text or f"Раунд игры «{game_title}»",
+                body=body_text or round_item.notes or "Приготовьтесь к следующему раунду.",
                 footer=footer_text or "Раунд игры",
                 music_status=self._state.music_status,
                 timer_total_seconds=self._state.timer_total_seconds,
@@ -183,6 +186,7 @@ class PresentationService(QObject):
         footer_text: str | None = None,
         top_left_text: str = "",
         top_right_text: str = "",
+        emphasize_media: bool = False,
     ) -> None:
         self._update_state(
             PresentationState(
@@ -209,6 +213,7 @@ class PresentationService(QObject):
                 logo_path=logo.file_path if logo is not None else None,
                 media_path=question_media.file_path if question_media is not None else None,
                 media_type=question_media.media_type if question_media is not None else None,
+                emphasize_media=emphasize_media,
             )
         )
 
@@ -224,6 +229,7 @@ class PresentationService(QObject):
         answer_media: MediaAsset | None = None,
         top_left_text: str = "",
         top_right_text: str = "",
+        emphasize_media: bool = False,
     ) -> None:
         self._update_state(
             PresentationState(
@@ -246,6 +252,7 @@ class PresentationService(QObject):
                 logo_path=logo.file_path if logo is not None else None,
                 media_path=answer_media.file_path if answer_media is not None else None,
                 media_type=answer_media.media_type if answer_media is not None else None,
+                emphasize_media=emphasize_media,
             )
         )
 

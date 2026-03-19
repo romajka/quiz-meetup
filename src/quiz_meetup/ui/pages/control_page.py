@@ -152,6 +152,12 @@ class GameControlPage(QWidget):
         self.questions_cards_layout.setContentsMargins(0, 0, 0, 0)
         self.questions_cards_layout.setSpacing(12)
 
+        self.finish_round_widget = self._build_button_row(
+            [
+                ("Завершить раунд", self.finish_round_requested, "AccentButton", "Check_All_Big"),
+            ]
+        )
+
         self.start_actions_widget = QWidget()
         self.start_actions_layout = QGridLayout(self.start_actions_widget)
         self.start_actions_layout.setContentsMargins(0, 0, 0, 0)
@@ -229,11 +235,7 @@ class GameControlPage(QWidget):
                 self.round_summary_label,
                 self.questions_state_label,
                 self.questions_cards_widget,
-                self._build_button_row(
-                    [
-                        ("Завершить раунд", self.finish_round_requested, "AccentButton", "Check_All_Big"),
-                    ]
-                ),
+                self.finish_round_widget,
                 self.round_completion_label,
             ],
         )
@@ -683,6 +685,8 @@ class GameControlPage(QWidget):
             self.round_summary_label.setText("Выберите раунд, чтобы увидеть его вопросы.")
             self.round_completion_label.setText("После завершения раунда у вопросов активируется кнопка показа ответа.")
             self.questions_state_label.setText("В выбранном раунде пока нет вопросов.")
+            self.finish_round_widget.setVisible(False)
+            self.round_completion_label.setVisible(False)
             return
 
         self.start_info_label.setText(
@@ -705,8 +709,11 @@ class GameControlPage(QWidget):
             )
             self.round_completion_label.setText("После завершения раунда у вопросов активируется кнопка показа ответа.")
             self.questions_state_label.setText("После выбора раунда здесь появятся карточки вопросов.")
+            self.finish_round_widget.setVisible(False)
+            self.round_completion_label.setVisible(False)
             return
 
+        has_questions = bool(round_questions)
         self.round_summary_label.setText(
             f"Раунд {selected_round.order_index}. {selected_round.title}\n"
             f"Таймер по умолчанию: "
@@ -728,6 +735,8 @@ class GameControlPage(QWidget):
             if round_questions
             else "В этом раунде пока нет вопросов."
         )
+        self.finish_round_widget.setVisible(has_questions and not round_completed)
+        self.round_completion_label.setVisible(has_questions)
 
     def _rebuild_media_buttons(self, media_assets: list[MediaAsset]) -> None:
         self._clear_layout(self.media_buttons_layout)
@@ -879,7 +888,7 @@ class GameControlPage(QWidget):
                 if question_media_items:
                     actions.append(
                         (
-                            "Медиа вопроса",
+                            "Увеличить медиа",
                             self.show_question_media_by_id_requested,
                             "CompactSecondaryButton",
                             "External_Link",
@@ -893,7 +902,7 @@ class GameControlPage(QWidget):
                 if question_media_items:
                     actions.append(
                         (
-                            "Медиа вопроса",
+                            "Увеличить медиа вопроса",
                             self.show_question_media_by_id_requested,
                             "CompactSecondaryButton",
                             "External_Link",
@@ -906,7 +915,7 @@ class GameControlPage(QWidget):
                 if answer_media_items:
                     actions.append(
                         (
-                            "Медиа ответа",
+                            "Увеличить медиа ответа",
                             self.show_answer_media_by_id_requested,
                             "CompactSecondaryButton",
                             "External_Link",

@@ -604,6 +604,28 @@ class MainWindow(QMainWindow):
         self._update_session_live_state(display_phase="round", round_id=round_item.id, question_id=None)
         self.open_projector_window()
 
+    def show_round_answers_screen(self) -> None:
+        round_item = self._resolve_active_round()
+        if round_item is None:
+            self._show_warning("Сначала выберите раунд.")
+            return
+
+        game = self.services.game_service.get_game(round_item.game_id)
+        game_title = game.title if game else "Без игры"
+        game_id = game.id if game is not None else round_item.game_id
+        self.services.timer_service.clear()
+        self.services.presentation_service.show_round(
+            round_item=round_item,
+            game_title=game_title,
+            logo=self._get_game_logo(game_id),
+            round_media=self._get_round_media(game_id, round_item.id),
+            subtitle_text=f"{self._round_type_label(round_item.round_type)}",
+            body_text="Сейчас узнаем правильные ответы.",
+            footer_text="Открывайте ответы по одному",
+        )
+        self._update_session_live_state(display_phase="round_answers", round_id=round_item.id, question_id=None)
+        self.open_projector_window()
+
     def show_selected_question(self) -> None:
         question = self._resolve_active_question()
         if question is None:
@@ -612,7 +634,13 @@ class MainWindow(QMainWindow):
 
         self._present_question(question)
 
-    def _present_question(self, question) -> None:
+    def _present_question(
+        self,
+        question,
+        *,
+        emphasize_media: bool = False,
+        preserve_timer: bool = False,
+    ) -> None:
         round_item = self.services.round_service.get_round(question.round_id)
         round_title = round_item.title if round_item else "Без раунда"
         round_questions = self.services.question_service.list_questions_by_round(question.round_id)
@@ -620,8 +648,8 @@ class MainWindow(QMainWindow):
         if game is None and round_item is not None:
             game = self.services.game_service.get_game(round_item.game_id)
         game_id = game.id if game is not None else (round_item.game_id if round_item is not None else 0)
-        resolved_timer_seconds, _timer_source = self._resolve_question_timer(question)
-        self._prepare_question_timer(question)
+        if not preserve_timer:
+            self._prepare_question_timer(question)
         self.services.presentation_service.show_question(
             question=question,
             round_title=round_title,
@@ -632,6 +660,7 @@ class MainWindow(QMainWindow):
             footer_text="",
             top_left_text=self._build_question_counter_text(question, round_questions),
             top_right_text=f"Очки: {question.points}",
+            emphasize_media=emphasize_media,
         )
         self._update_session_live_state(
             display_phase="question",
@@ -641,6 +670,20 @@ class MainWindow(QMainWindow):
         self.open_projector_window()
 
     def hide_question_screen(self) -> None:
+        round_item = self._resolve_active_round()
+
+        if round_item is None:
+            question = self._resolve_active_question()
+            if question is not None:
+                round_item = self.services.round_service.get_round(question.round_id)
+
+        if round_item is not None:
+            if round_item.id in self.completed_round_ids:
+                self.show_round_answers_screen()
+                return
+            self.show_round_by_id(round_item.id)
+            return
+
         self.show_waiting_screen()
 
     def show_answer_screen(self) -> None:
@@ -651,7 +694,12 @@ class MainWindow(QMainWindow):
 
         self._present_answer(question)
 
-    def _present_answer(self, question) -> None:
+    def _present_answer(
+        self,
+        question,
+        *,
+        emphasize_media: bool = False,
+    ) -> None:
         round_item = self.services.round_service.get_round(question.round_id)
         round_title = round_item.title if round_item else "Без раунда"
         round_questions = self.services.question_service.list_questions_by_round(question.round_id)
@@ -674,6 +722,7 @@ class MainWindow(QMainWindow):
             answer_media=answer_media,
             top_left_text=self._build_question_counter_text(question, round_questions),
             top_right_text=f"Очки: {question.points}",
+            emphasize_media=emphasize_media,
         )
         self._update_session_live_state(
             display_phase="answer",
@@ -962,12 +1011,26 @@ class MainWindow(QMainWindow):
             self._show_warning("У этого вопроса нет отдельного медиа вопроса.")
             return
 
-        self.services.presentation_service.show_media_asset(
-            game_title=game.title,
-            media=media,
-            logo=self._get_game_logo(game.id),
+        preserve_timer = False
+        toggle_off = False
+        if self.running_session_id is not None:
+            session = self.services.game_session_service.get_session(self.running_session_id)
+            preserve_timer = (
+                session is not None
+                and session.display_phase == "question"
+                and session.active_question_id == question.id
+            )
+            toggle_off = (
+                preserve_timer
+                and self.services.presentation_service.state.scene == "question"
+                and self.services.presentation_service.state.emphasize_media
+            )
+
+        self._present_question(
+            question,
+            emphasize_media=not toggle_off,
+            preserve_timer=preserve_timer,
         )
-        self.open_projector_window()
 
     def show_answer_media_by_id(self, question_id: int) -> None:
         if question_id <= 0:
@@ -987,12 +1050,18 @@ class MainWindow(QMainWindow):
             self._show_warning("У этого вопроса нет отдельного медиа ответа.")
             return
 
-        self.services.presentation_service.show_media_asset(
-            game_title=game.title,
-            media=media,
-            logo=self._get_game_logo(game.id),
-        )
-        self.open_projector_window()
+        toggle_off = False
+        if self.running_session_id is not None:
+            session = self.services.game_session_service.get_session(self.running_session_id)
+            toggle_off = (
+                session is not None
+                and session.display_phase == "answer"
+                and session.active_question_id == question.id
+                and self.services.presentation_service.state.scene == "answer"
+                and self.services.presentation_service.state.emphasize_media
+            )
+
+        self._present_answer(question, emphasize_media=not toggle_off)
 
     def finish_current_round(self) -> None:
         round_item = self._resolve_active_round()
@@ -1008,12 +1077,12 @@ class MainWindow(QMainWindow):
             )
         self.services.timer_service.pause()
         self._update_session_live_state(
-            display_phase="waiting",
+            display_phase="round_answers",
             round_id=round_item.id,
-            question_id=self._resolve_active_question().id if self._resolve_active_question() is not None else None,
+            question_id=None,
         )
         self.refresh_context_panels()
-        self.show_waiting_screen()
+        self.show_round_answers_screen()
 
     def _resolve_active_game(self) -> Game | None:
         if self.page_stack.currentWidget() is self.game_control_page:
@@ -1068,6 +1137,7 @@ class MainWindow(QMainWindow):
             "welcome": self.show_welcome_screen,
             "waiting": self.show_waiting_screen,
             "round": self.show_selected_round,
+            "round_answers": self.show_round_answers_screen,
             "question": self.show_selected_question,
             "answer": self.show_answer_screen,
             "scores": self.show_scoreboard,

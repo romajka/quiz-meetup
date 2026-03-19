@@ -10,8 +10,10 @@ from PySide6.QtCore import (
     QPauseAnimation,
     QParallelAnimationGroup,
     QPropertyAnimation,
+    QRect,
     QSequentialAnimationGroup,
     QSize,
+    QTimer,
     Qt,
     QUrl,
     QVariantAnimation,
@@ -80,8 +82,8 @@ class CircularTimerWidget(QWidget):
         self._progress = 0.0
         self._finished = False
         self._animation = QVariantAnimation(self)
-        self._animation.setDuration(420)
-        self._animation.setEasingCurve(QEasingCurve.OutCubic)
+        self._animation.setDuration(960)
+        self._animation.setEasingCurve(QEasingCurve.Linear)
         self._animation.valueChanged.connect(self._apply_progress_value)
         self.setObjectName("ProjectorTimerCircle")
         self.setMinimumSize(130, 130)
@@ -93,6 +95,13 @@ class CircularTimerWidget(QWidget):
         progress = max(0.0, min(1.0, progress))
         if self._animation.state() == QAbstractAnimation.Running:
             self._animation.stop()
+        smooth_countdown = (
+            not finished
+            and not self._finished
+            and abs(progress - self._progress) <= 0.22
+        )
+        self._animation.setDuration(960 if smooth_countdown else 220)
+        self._animation.setEasingCurve(QEasingCurve.Linear if smooth_countdown else QEasingCurve.OutCubic)
         self._finished = finished
         self._animation.setStartValue(self._progress)
         self._animation.setEndValue(progress)
@@ -146,6 +155,8 @@ class ProjectorWindow(QMainWindow):
         self._question_timer_bar_animation = QPropertyAnimation(self)
         self._active_animations: list[QSequentialAnimationGroup | QParallelAnimationGroup | QPropertyAnimation] = []
         self._last_content_signature: tuple | None = None
+        self._locked_normal_geometry: QRect | None = None
+        self._suspend_geometry_tracking = False
 
         self.setWindowTitle("Quiz Meetup - Проектор")
         self.resize(1366, 900)
@@ -205,6 +216,11 @@ class ProjectorWindow(QMainWindow):
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)
         self.transition_overlay.setGeometry(self.screen_stack.rect())
+        self._track_normal_geometry()
+
+    def moveEvent(self, event) -> None:  # noqa: N802
+        super().moveEvent(event)
+        self._track_normal_geometry()
 
     def _build_rich_screen(self) -> QWidget:
         widget = QWidget()
@@ -519,38 +535,21 @@ class ProjectorWindow(QMainWindow):
         self.winners_music_status.setAlignment(Qt.AlignCenter)
         self.winners_music_status.hide()
 
-        self.winner_cards: list[QFrame] = []
-        self.winner_place_labels: list[QLabel] = []
-        self.winner_team_labels: list[QLabel] = []
-        self.winner_score_labels: list[QLabel] = []
-        self.winner_cards = [None] * 5  # type: ignore[list-item]
-        self.winner_place_labels = [None] * 5  # type: ignore[list-item]
-        self.winner_team_labels = [None] * 5  # type: ignore[list-item]
-        self.winner_score_labels = [None] * 5  # type: ignore[list-item]
+        self.winner_cards: list[QFrame] = [None] * 5  # type: ignore[list-item]
+        self.winner_place_labels: list[QLabel] = [None] * 5  # type: ignore[list-item]
+        self.winner_team_labels: list[QLabel] = [None] * 5  # type: ignore[list-item]
+        self.winner_score_labels: list[QLabel] = [None] * 5  # type: ignore[list-item]
 
-        podium_row = QWidget()
-        podium_row.setAttribute(Qt.WA_StyledBackground, True)
-        podium_row.setStyleSheet("background: transparent;")
-        podium_row_layout = QHBoxLayout(podium_row)
-        podium_row_layout.setContentsMargins(0, 0, 0, 0)
-        podium_row_layout.setSpacing(20)
-        podium_row_layout.addStretch(1)
-        for place in (2, 1, 3):
+        winners_list_widget = QWidget()
+        winners_list_widget.setAttribute(Qt.WA_StyledBackground, True)
+        winners_list_widget.setStyleSheet("background: transparent;")
+        winners_list_layout = QVBoxLayout(winners_list_widget)
+        winners_list_layout.setContentsMargins(120, 8, 120, 8)
+        winners_list_layout.setSpacing(18)
+        for place in (1, 2, 3, 4, 5):
             slot = self._build_winner_slot(place)
-            podium_row_layout.addWidget(slot, 12 if place == 1 else 10)
-        podium_row_layout.addStretch(1)
-
-        trailing_row = QWidget()
-        trailing_row.setAttribute(Qt.WA_StyledBackground, True)
-        trailing_row.setStyleSheet("background: transparent;")
-        trailing_row_layout = QHBoxLayout(trailing_row)
-        trailing_row_layout.setContentsMargins(0, 0, 0, 0)
-        trailing_row_layout.setSpacing(20)
-        trailing_row_layout.addStretch(1)
-        for place in (4, 5):
-            slot = self._build_winner_slot(place)
-            trailing_row_layout.addWidget(slot, 9)
-        trailing_row_layout.addStretch(1)
+            winners_list_layout.addWidget(slot)
+        winners_list_layout.addStretch(1)
 
         self.winners_footer = QLabel()
         self.winners_footer.setObjectName("ProjectorFooter")
@@ -561,10 +560,7 @@ class ProjectorWindow(QMainWindow):
         layout.addWidget(self.winners_title)
         layout.addWidget(self.winners_subtitle)
         layout.addWidget(self.winners_music_status, alignment=Qt.AlignCenter)
-        layout.addStretch(1)
-        layout.addWidget(podium_row)
-        layout.addWidget(trailing_row)
-        layout.addStretch(1)
+        layout.addWidget(winners_list_widget, 1)
         layout.addWidget(self.winners_footer)
         return widget
 
@@ -575,48 +571,43 @@ class ProjectorWindow(QMainWindow):
         wrapper_layout = QVBoxLayout(wrapper)
         wrapper_layout.setContentsMargins(0, 0, 0, 0)
         wrapper_layout.setSpacing(0)
-        wrapper_layout.addStretch(1)
 
         card = QFrame()
         card.setObjectName("ProjectorWinnerCard")
         card.setProperty("champion", place == 1)
         card.setProperty("placeRank", place)
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-
         if place == 1:
-            card.setMinimumHeight(300)
-            card.setMaximumWidth(430)
+            card.setMinimumHeight(126)
         elif place in (2, 3):
-            card.setMinimumHeight(248)
-            card.setMaximumWidth(360)
+            card.setMinimumHeight(108)
         else:
-            card.setMinimumHeight(200)
-            card.setMaximumWidth(320)
+            card.setMinimumHeight(96)
 
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(24, 24, 24, 24)
-        card_layout.setSpacing(10)
+        card_layout = QHBoxLayout(card)
+        card_layout.setContentsMargins(28, 18, 28, 18)
+        card_layout.setSpacing(18)
 
         place_label = QLabel(f"{place} место")
         place_label.setObjectName("ProjectorWinnerPlace")
         place_label.setAlignment(Qt.AlignCenter)
+        place_label.setMinimumWidth(176)
 
         team_label = QLabel("Команда не определена")
         team_label.setObjectName("ProjectorWinnerTeam")
-        team_label.setAlignment(Qt.AlignCenter)
+        team_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         team_label.setWordWrap(True)
 
         score_label = QLabel("0 очков")
         score_label.setObjectName("ProjectorWinnerScore")
-        score_label.setAlignment(Qt.AlignCenter)
+        score_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        score_label.setMinimumWidth(180)
 
-        card_layout.addWidget(place_label)
-        card_layout.addStretch(1)
-        card_layout.addWidget(team_label)
-        card_layout.addWidget(score_label)
-        card_layout.addStretch(1)
+        card_layout.addWidget(place_label, 0)
+        card_layout.addWidget(team_label, 1)
+        card_layout.addWidget(score_label, 0)
 
-        wrapper_layout.addWidget(card, alignment=Qt.AlignHCenter | Qt.AlignBottom)
+        wrapper_layout.addWidget(card)
 
         index = place - 1
         self.winner_cards[index] = card
@@ -626,9 +617,26 @@ class ProjectorWindow(QMainWindow):
         return wrapper
 
     def apply_state(self, state: PresentationState) -> None:
+        preserve_normal_geometry = self.isVisible() and not self.isFullScreen() and not self.isMaximized()
+        previous_geometry = (
+            QRect(self._locked_normal_geometry)
+            if preserve_normal_geometry and self._locked_normal_geometry is not None
+            else QRect(self.geometry()) if preserve_normal_geometry else None
+        )
         self._active_scene = state.scene
+        has_highlighted_option_answer = (
+            state.scene == "answer"
+            and state.highlighted_option_index >= 0
+            and any(option.strip() for option in state.options)
+        )
         content_signature = self._make_content_signature(state)
-        animate_content = False
+        animate_content = (
+            self.isVisible()
+            and self._last_content_signature is not None
+            and content_signature != self._last_content_signature
+            and state.scene == "answer"
+            and not has_highlighted_option_answer
+        )
         snapshot = None
 
         self._stop_active_animations()
@@ -662,26 +670,61 @@ class ProjectorWindow(QMainWindow):
             self.screen_stack.setCurrentWidget(self.rich_screen)
             if hasattr(self, "rich_overlay"):
                 self.rich_overlay.raise_()
+            if has_highlighted_option_answer and 0 <= state.highlighted_option_index < len(self.option_labels):
+                highlighted_label = self.option_labels[state.highlighted_option_index]
+                if highlighted_label.isVisible():
+                    self._animate_correct_option(highlighted_label, delay_ms=80)
             if animate_content:
                 self._animate_rich_screen(state)
 
-        if animate_content:
-            self._animate_scene_transition(snapshot)
         self._last_content_signature = content_signature
+        if previous_geometry is not None:
+            self._restore_normal_geometry(previous_geometry)
+
+    def _track_normal_geometry(self) -> None:
+        if self._suspend_geometry_tracking:
+            return
+        if not self.isVisible() or self.isFullScreen() or self.isMaximized():
+            return
+        self._locked_normal_geometry = QRect(self.geometry())
+
+    def _restore_normal_geometry(self, geometry: QRect) -> None:
+        if self.isFullScreen() or self.isMaximized():
+            return
+
+        def apply_restore() -> None:
+            if self.isFullScreen() or self.isMaximized():
+                return
+            self._suspend_geometry_tracking = True
+            try:
+                self.setGeometry(geometry)
+                self._locked_normal_geometry = QRect(geometry)
+            finally:
+                self._suspend_geometry_tracking = False
+
+        apply_restore()
+        QTimer.singleShot(0, apply_restore)
 
     def _apply_rich_state(self, state: PresentationState) -> None:
         is_round_scene = state.scene == "round"
         is_question_scene = state.scene == "question"
         is_answer_scene = state.scene == "answer"
+        is_centered_info_scene = state.scene in {"welcome", "waiting", "game", "empty"} and not state.media_path
+        emphasize_media = bool(state.media_path) and state.emphasize_media and state.scene in {"question", "answer"}
         has_highlighted_option_answer = (
             state.scene == "answer"
             and state.highlighted_option_index >= 0
             and any(option.strip() for option in state.options)
         )
+        is_featured_open_answer = (
+            is_answer_scene
+            and not has_highlighted_option_answer
+            and bool(state.answer_text.strip())
+        )
         self.rich_top_left.setText(state.top_left_text)
         self.rich_top_right.setText(state.top_right_text)
-        self.rich_top_left.setVisible(bool(state.top_left_text))
-        self.rich_top_right.setVisible(bool(state.top_right_text))
+        self.rich_top_left.setVisible(bool(state.top_left_text) and not is_featured_open_answer)
+        self.rich_top_right.setVisible(bool(state.top_right_text) and not is_featured_open_answer)
         self.rich_title.setText(state.title)
         self.rich_subtitle.setText(state.subtitle)
         self.rich_body.setText(state.body)
@@ -693,20 +736,41 @@ class ProjectorWindow(QMainWindow):
         self.rich_footer.setVisible(False)
         self.rich_badge.setVisible(bool(state.badge))
         self.answer_label.setText(state.answer_text)
+        self.answer_label.setProperty("featured", is_featured_open_answer)
+        self._refresh_style(self.answer_label)
         self.answer_label.setVisible(bool(state.answer_text) and not has_highlighted_option_answer)
         self.rich_text_panel.setText(self._build_rich_text_html(state))
         self.rich_text_panel.setVisible(
             bool(state.title or state.subtitle or state.body or state.footer)
+            and not is_featured_open_answer
         )
         if is_round_scene:
             self.rich_text_panel.setMinimumHeight(max(420, self.height() // 2))
+            self.rich_text_panel.setMaximumHeight(16777215)
             self.rich_text_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         elif is_question_scene:
-            self.rich_text_panel.setMinimumHeight(max(300, self.height() // 3))
+            self.rich_text_panel.setMinimumHeight(110 if emphasize_media else max(300, self.height() // 3))
+            self.rich_text_panel.setMaximumHeight(220 if emphasize_media else 16777215)
+            self.rich_text_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        elif is_featured_open_answer:
+            self.rich_text_panel.setMinimumHeight(0)
+            self.rich_text_panel.setMaximumHeight(0)
+            self.rich_text_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        elif is_answer_scene and emphasize_media:
+            self.rich_text_panel.setMinimumHeight(120)
+            self.rich_text_panel.setMaximumHeight(180)
             self.rich_text_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         else:
             self.rich_text_panel.setMinimumHeight(0)
+            self.rich_text_panel.setMaximumHeight(16777215)
             self.rich_text_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
+        if is_featured_open_answer:
+            self.answer_label.setMinimumHeight(max(360, self.height() // 2))
+            self.answer_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        else:
+            self.answer_label.setMinimumHeight(0)
+            self.answer_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
         self._apply_logo(self.rich_logo, state.logo_path)
         if is_question_scene or is_answer_scene:
@@ -719,15 +783,42 @@ class ProjectorWindow(QMainWindow):
             self._apply_foreground_media(state.media_path, state.media_type)
         self._apply_options(state.options, state.option_media_paths, state.highlighted_option_index)
         self._apply_timer(state)
-        if is_question_scene:
+        self.rich_overlay_layout.setStretchFactor(self.answer_label, 0)
+        if is_featured_open_answer:
+            self.rich_overlay_layout.setStretchFactor(self.media_stack, 1 if self.media_stack.isVisible() else 0)
+            self.rich_overlay_layout.setStretchFactor(self.rich_text_panel, 0)
+            self.rich_overlay_layout.setStretchFactor(self.options_frame, 0)
+            self.rich_overlay_layout.setStretchFactor(self.answer_label, 1)
+            self.media_stack.setMinimumHeight(max(320, self.height() // 3) if self.media_stack.isVisible() else 0)
+            self.media_stack.setMaximumHeight(16777215 if self.media_stack.isVisible() else 0)
+        elif is_question_scene:
+            self.rich_overlay_layout.setStretchFactor(self.media_stack, 3 if emphasize_media else 0)
+            self.rich_overlay_layout.setStretchFactor(self.rich_text_panel, 0 if emphasize_media else 1)
+            self.rich_overlay_layout.setStretchFactor(self.options_frame, 0)
+            if emphasize_media:
+                self.media_stack.setMinimumHeight(max(520, int(self.height() * 0.58)))
+                self.media_stack.setMaximumHeight(16777215)
+            else:
+                self.media_stack.setMinimumHeight(0)
+                self.media_stack.setMaximumHeight(max(260, self.height() // 2 - 60))
+        elif is_answer_scene and emphasize_media:
+            self.rich_overlay_layout.setStretchFactor(self.media_stack, 2)
+            self.rich_overlay_layout.setStretchFactor(self.rich_text_panel, 0)
+            self.rich_overlay_layout.setStretchFactor(self.options_frame, 0)
+            self.media_stack.setMinimumHeight(max(500, int(self.height() * 0.56)))
+            self.media_stack.setMaximumHeight(16777215)
+        elif is_centered_info_scene:
             self.rich_overlay_layout.setStretchFactor(self.media_stack, 0)
             self.rich_overlay_layout.setStretchFactor(self.rich_text_panel, 1)
             self.rich_overlay_layout.setStretchFactor(self.options_frame, 0)
-            self.media_stack.setMaximumHeight(max(260, self.height() // 2 - 60))
+            self.rich_text_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            self.media_stack.setMinimumHeight(0)
+            self.media_stack.setMaximumHeight(0)
         else:
             self.rich_overlay_layout.setStretchFactor(self.media_stack, 1)
             self.rich_overlay_layout.setStretchFactor(self.rich_text_panel, 0)
             self.rich_overlay_layout.setStretchFactor(self.options_frame, 0)
+            self.media_stack.setMinimumHeight(0)
             self.media_stack.setMaximumHeight(16777215)
 
     @staticmethod
@@ -768,6 +859,27 @@ class ProjectorWindow(QMainWindow):
                 f"<div style='font-size:{font_size}px;font-weight:800;color:#f8fafc;line-height:1.12;margin:0;'>{escape(question_text)}</div>"
                 "</div>"
             )
+
+        if state.scene == "answer":
+            has_highlighted_option_answer = (
+                state.highlighted_option_index >= 0
+                and any(option.strip() for option in state.options)
+            )
+            if has_highlighted_option_answer:
+                question_text = (state.body or state.title).strip()
+                if not question_text:
+                    question_text = "Текст вопроса"
+                font_size = ProjectorWindow._question_font_size(
+                    question_text,
+                    has_media=bool(state.media_path),
+                    has_options=True,
+                )
+                return (
+                    "<div style='text-align:center; max-width:1680px;'>"
+                    f"<div style='font-size:{font_size}px;font-weight:800;color:#f8fafc;line-height:1.12;margin:0;'>{escape(question_text)}</div>"
+                    "</div>"
+                )
+            return ""
 
         parts: list[str] = []
         if state.title:
@@ -864,11 +976,6 @@ class ProjectorWindow(QMainWindow):
                 label.clear()
                 label.hide()
             self._refresh_style(label)
-
-        if is_answer_scene and 0 <= highlighted_index < len(self.option_labels):
-            highlighted_label = self.option_labels[highlighted_index]
-            if highlighted_label.isVisible():
-                self._animate_correct_option(highlighted_label)
 
     def _apply_logo(self, label: ScaledPixmapLabel, logo_path: str | None) -> None:
         if not logo_path:
@@ -1062,61 +1169,73 @@ class ProjectorWindow(QMainWindow):
         self.question_timer_source.setText(state.timer_source or "Таймер вопроса")
         self.question_timer_value.setText(self._format_time(remaining_seconds))
         self.rich_timer_circle.set_progress_state(progress_fraction, finished)
-        self._animate_timer_bar(progress_value)
-        self._animate_question_timer_bar(progress_value)
+        smooth_progress = state.timer_status == "running" and not finished
+        self._animate_timer_bar(progress_value, smooth=smooth_progress)
+        self._animate_question_timer_bar(progress_value, smooth=smooth_progress)
 
     @staticmethod
     def _format_time(seconds: int) -> str:
         minutes, seconds = divmod(max(seconds, 0), 60)
         return f"{minutes:02d}:{seconds:02d}"
 
-    def _animate_timer_bar(self, target_value: int) -> None:
+    def _animate_timer_bar(self, target_value: int, *, smooth: bool = False) -> None:
         if self._timer_bar_animation.targetObject() is not self.rich_timer_progress:
             self._timer_bar_animation = QPropertyAnimation(self.rich_timer_progress, b"value", self)
-            self._timer_bar_animation.setDuration(420)
-            self._timer_bar_animation.setEasingCurve(QEasingCurve.OutCubic)
         else:
             self._timer_bar_animation.stop()
+        self._timer_bar_animation.setDuration(960 if smooth else 220)
+        self._timer_bar_animation.setEasingCurve(QEasingCurve.Linear if smooth else QEasingCurve.OutCubic)
         self._timer_bar_animation.setStartValue(self.rich_timer_progress.value())
         self._timer_bar_animation.setEndValue(target_value)
         self._timer_bar_animation.start()
 
-    def _animate_question_timer_bar(self, target_value: int) -> None:
+    def _animate_question_timer_bar(self, target_value: int, *, smooth: bool = False) -> None:
         if self._question_timer_bar_animation.targetObject() is not self.question_timer_progress:
             self._question_timer_bar_animation = QPropertyAnimation(self.question_timer_progress, b"value", self)
-            self._question_timer_bar_animation.setDuration(420)
-            self._question_timer_bar_animation.setEasingCurve(QEasingCurve.OutCubic)
         else:
             self._question_timer_bar_animation.stop()
+        self._question_timer_bar_animation.setDuration(960 if smooth else 220)
+        self._question_timer_bar_animation.setEasingCurve(QEasingCurve.Linear if smooth else QEasingCurve.OutCubic)
         self._question_timer_bar_animation.setStartValue(self.question_timer_progress.value())
         self._question_timer_bar_animation.setEndValue(target_value)
         self._question_timer_bar_animation.start()
 
-    def _animate_correct_option(self, label: QLabel) -> None:
+    def _animate_correct_option(self, label: QLabel, delay_ms: int = 0) -> None:
         effect = label.graphicsEffect()
         if not isinstance(effect, QGraphicsDropShadowEffect):
             effect = QGraphicsDropShadowEffect(label)
             effect.setOffset(0, 0)
             label.setGraphicsEffect(effect)
         effect.setColor(QColor(45, 212, 191, 220))
-        effect.setBlurRadius(14)
-
-        final_geometry = label.geometry()
-        if final_geometry.width() <= 0 or final_geometry.height() <= 0:
-            return
-        pulse_geometry = final_geometry.adjusted(-10, -8, 10, 8)
+        effect.setBlurRadius(12)
 
         blur_out = QPropertyAnimation(effect, b"blurRadius", self)
-        blur_out.setDuration(220)
-        blur_out.setStartValue(14)
-        blur_out.setEndValue(44)
+        blur_out.setDuration(180)
+        blur_out.setStartValue(12)
+        blur_out.setEndValue(26)
         blur_out.setEasingCurve(QEasingCurve.OutCubic)
 
         blur_in = QPropertyAnimation(effect, b"blurRadius", self)
-        blur_in.setDuration(260)
-        blur_in.setStartValue(44)
-        blur_in.setEndValue(24)
+        blur_in.setDuration(220)
+        blur_in.setStartValue(26)
+        blur_in.setEndValue(16)
         blur_in.setEasingCurve(QEasingCurve.InOutCubic)
+
+        blur_sequence = QSequentialAnimationGroup(self)
+        if delay_ms > 0:
+            blur_sequence.addAnimation(QPauseAnimation(delay_ms))
+        blur_sequence.addAnimation(blur_out)
+        blur_sequence.addAnimation(blur_in)
+        blur_sequence.finished.connect(lambda animation=blur_sequence: self._release_animation(animation))
+        self._keep_animation(blur_sequence)
+        blur_sequence.start()
+
+    def _animate_answer_banner(self, label: QLabel, delay_ms: int = 0) -> None:
+        final_geometry = label.geometry()
+        if final_geometry.width() <= 0 or final_geometry.height() <= 0:
+            return
+
+        pulse_geometry = final_geometry.adjusted(-12, -10, 12, 10)
 
         geometry_out = QPropertyAnimation(label, b"geometry", self)
         geometry_out.setDuration(220)
@@ -1130,58 +1249,27 @@ class ProjectorWindow(QMainWindow):
         geometry_in.setEndValue(final_geometry)
         geometry_in.setEasingCurve(QEasingCurve.InOutCubic)
 
-        blur_sequence = QSequentialAnimationGroup(self)
-        blur_sequence.addAnimation(blur_out)
-        blur_sequence.addAnimation(blur_in)
-
-        geometry_sequence = QSequentialAnimationGroup(self)
-        geometry_sequence.addAnimation(geometry_out)
-        geometry_sequence.addAnimation(geometry_in)
-
-        group = QParallelAnimationGroup(self)
-        group.addAnimation(blur_sequence)
-        group.addAnimation(geometry_sequence)
-        group.finished.connect(lambda w=label, rect=final_geometry: w.setGeometry(rect))
-        group.finished.connect(lambda animation=group: self._release_animation(animation))
-        self._keep_animation(group)
-        group.start()
+        sequence = QSequentialAnimationGroup(self)
+        if delay_ms > 0:
+            sequence.addAnimation(QPauseAnimation(delay_ms))
+        sequence.addAnimation(geometry_out)
+        sequence.addAnimation(geometry_in)
+        sequence.finished.connect(lambda w=label, rect=final_geometry: w.setGeometry(rect))
+        sequence.finished.connect(lambda animation=sequence: self._release_animation(animation))
+        self._keep_animation(sequence)
+        sequence.start()
 
     def _animate_rich_screen(self, state: PresentationState) -> None:
-        widgets: list[QWidget] = [
-            self.rich_top_left,
-            self.rich_top_right,
-            self.rich_logo,
-            self.rich_title,
-            self.rich_subtitle,
-            self.rich_badge,
-            self.rich_music_status,
-            self.rich_timer_frame,
-            self.rich_body,
-            self.media_stack,
-            self.rich_footer,
-        ]
-        self._animate_widget_batch(widgets, base_delay=0, step=56, offset_y=22, scale_inset=14)
-
-        if self.options_frame.isVisible():
-            delay = 200
-            for index, option_label in enumerate(self.option_labels):
-                if option_label.isVisible():
-                    self._animate_widget_in(
-                        option_label,
-                        delay_ms=delay + (index * 70),
-                        offset_y=18,
-                        duration=300,
-                        scale_inset=12,
-                    )
-
-        if self.answer_label.isVisible():
-            self._animate_widget_in(
-                self.answer_label,
-                delay_ms=250 if state.scene == "answer" else 120,
-                offset_y=14,
-                duration=340,
-                scale_inset=12,
-            )
+        if state.scene == "answer":
+            if self.answer_label.isVisible():
+                self._animate_widget_in(
+                    self.answer_label,
+                    delay_ms=40,
+                    offset_y=0,
+                    duration=260,
+                    scale_inset=0,
+                )
+            return
 
     def _animate_score_screen(self) -> None:
         self._animate_widget_batch(
@@ -1261,18 +1349,6 @@ class ProjectorWindow(QMainWindow):
 
         effect = self._ensure_opacity_effect(widget)
         effect.setOpacity(0.0)
-        final_geometry = widget.geometry()
-        if final_geometry.width() <= 0 or final_geometry.height() <= 0:
-            effect.setOpacity(1.0)
-            return
-
-        start_geometry = final_geometry.adjusted(
-            scale_inset,
-            scale_inset,
-            -scale_inset,
-            -scale_inset,
-        ).translated(QPoint(0, offset_y))
-        widget.setGeometry(start_geometry)
 
         opacity_animation = QPropertyAnimation(effect, b"opacity", self)
         opacity_animation.setDuration(duration)
@@ -1280,48 +1356,13 @@ class ProjectorWindow(QMainWindow):
         opacity_animation.setEndValue(1.0)
         opacity_animation.setEasingCurve(QEasingCurve.OutCubic)
 
-        geometry_animation = QPropertyAnimation(widget, b"geometry", self)
-        geometry_animation.setDuration(duration)
-        geometry_animation.setStartValue(start_geometry)
-        geometry_animation.setEndValue(final_geometry)
-        geometry_animation.setEasingCurve(QEasingCurve.OutCubic)
-
-        opacity_sequence = QSequentialAnimationGroup(self)
-        geometry_sequence = QSequentialAnimationGroup(self)
+        sequence = QSequentialAnimationGroup(self)
         if delay_ms > 0:
-            opacity_sequence.addAnimation(QPauseAnimation(delay_ms))
-            geometry_sequence.addAnimation(QPauseAnimation(delay_ms))
-        opacity_sequence.addAnimation(opacity_animation)
-        geometry_sequence.addAnimation(geometry_animation)
-
-        group = QParallelAnimationGroup(self)
-        group.addAnimation(opacity_sequence)
-        group.addAnimation(geometry_sequence)
-        group.finished.connect(lambda w=widget, rect=final_geometry: w.setGeometry(rect))
-        group.finished.connect(lambda animation=group: self._release_animation(animation))
-        self._keep_animation(group)
-        group.start()
-
-    def _animate_scene_transition(self, snapshot: QPixmap | None) -> None:
-        if snapshot is None or snapshot.isNull():
-            self.transition_overlay.hide()
-            return
-
-        self.transition_overlay.setPixmap(snapshot)
-        self.transition_overlay.setGeometry(self.screen_stack.rect())
-        self.transition_opacity.setOpacity(1.0)
-        self.transition_overlay.show()
-        self.transition_overlay.raise_()
-
-        fade = QPropertyAnimation(self.transition_opacity, b"opacity", self)
-        fade.setDuration(320)
-        fade.setStartValue(1.0)
-        fade.setEndValue(0.0)
-        fade.setEasingCurve(QEasingCurve.OutCubic)
-        fade.finished.connect(self.transition_overlay.hide)
-        fade.finished.connect(lambda animation=fade: self._release_animation(animation))
-        self._keep_animation(fade)
-        fade.start()
+            sequence.addAnimation(QPauseAnimation(delay_ms))
+        sequence.addAnimation(opacity_animation)
+        sequence.finished.connect(lambda animation=sequence: self._release_animation(animation))
+        self._keep_animation(sequence)
+        sequence.start()
 
     def _capture_transition_snapshot(self) -> QPixmap | None:
         if not self.isVisible() or self.screen_stack.width() <= 0 or self.screen_stack.height() <= 0:
@@ -1387,6 +1428,7 @@ class ProjectorWindow(QMainWindow):
             state.background_type,
             state.media_path,
             state.media_type,
+            state.emphasize_media,
         )
 
     @staticmethod
@@ -1433,25 +1475,25 @@ class ProjectorWindow(QMainWindow):
         score_font = score_label.font()
 
         if place == 1:
+            place_font.setPointSize(28)
+            place_font.setBold(True)
+            team_font.setPointSize(40)
+            team_font.setBold(True)
+            score_font.setPointSize(28)
+            score_font.setBold(True)
+        elif place in (2, 3):
             place_font.setPointSize(24)
             place_font.setBold(True)
-            team_font.setPointSize(34)
+            team_font.setPointSize(32)
             team_font.setBold(True)
             score_font.setPointSize(24)
             score_font.setBold(True)
-        elif place in (2, 3):
-            place_font.setPointSize(20)
-            place_font.setBold(True)
-            team_font.setPointSize(28)
-            team_font.setBold(True)
-            score_font.setPointSize(20)
-            score_font.setBold(True)
         else:
-            place_font.setPointSize(17)
+            place_font.setPointSize(21)
             place_font.setBold(True)
-            team_font.setPointSize(23)
+            team_font.setPointSize(27)
             team_font.setBold(True)
-            score_font.setPointSize(17)
+            score_font.setPointSize(21)
             score_font.setBold(True)
 
         place_label.setFont(place_font)

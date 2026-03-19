@@ -663,6 +663,15 @@ QLabel#ProjectorAnswer {
     font-weight: 700;
 }
 
+QLabel#ProjectorAnswer[featured="true"] {
+    background: transparent;
+    color: #f8fafc;
+    border: none;
+    padding: 0 36px;
+    font-size: 96px;
+    font-weight: 900;
+}
+
 QTableWidget#ProjectorScoreTable {
     background: rgba(255, 255, 255, 0.08);
     color: #f8fafc;
@@ -690,28 +699,31 @@ QTableWidget#ProjectorScoreTable QHeaderView::section {
 QFrame#ProjectorWinnerCard {
     background: rgba(255, 255, 255, 0.08);
     border: 1px solid rgba(255, 255, 255, 0.16);
-    border-radius: 30px;
+    border-radius: 28px;
 }
 
 QFrame#ProjectorWinnerCard[champion="true"] {
-    border: 2px solid rgba(250, 204, 21, 0.42);
+    border: 2px solid rgba(250, 204, 21, 0.56);
 }
 
 QLabel#ProjectorWinnerPlace {
-    color: #dbeafe;
-    font-size: 18px;
-    font-weight: 800;
-    letter-spacing: 0.6px;
+    color: #f8fafc;
+    font-size: 22px;
+    font-weight: 900;
+    letter-spacing: 0.4px;
+    padding: 10px 14px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.14);
 }
 
 QLabel#ProjectorWinnerTeam {
     color: #f8fafc;
-    font-size: 24px;
-    font-weight: 800;
+    font-size: 30px;
+    font-weight: 900;
 }
 
 QLabel#ProjectorWinnerScore {
-    color: #d7e7ff;
-    font-size: 18px;
-    font-weight: 800;
+    color: #ffffff;
+    font-size: 24px;
+    font-weight: 900;
 }
